@@ -14,9 +14,11 @@ public:
     float relative_prob{};
     PrivateCards();
     PrivateCards(int card1, int card2, float weight);
-    uint64_t toBoardLong();
+    uint64_t toBoardLong() const;
     int hashCode();
     string toString();
+    int hashCode() const;
+    string toString() const;
     const vector<int> & get_hands() const;
 private:
     vector<int> card_vec;

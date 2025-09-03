@@ -129,6 +129,16 @@ p, li { white-space: pre-wrap; }
       <item>
        <layout class="QVBoxLayout" name="boardLayout">
         <item>
+         <widget class="QCheckBox" name="handAnalysisCheckBox">
+          <property name="locale">
+           <locale language="English" country="UnitedStates"/>
+          </property>
+          <property name="text">
+           <string>Hand Analysis Mode</string>
+          </property>
+         </widget>
+        </item>
+        <item>
          <widget class="QLabel" name="label">
           <property name="text">
            <string>Board</string>

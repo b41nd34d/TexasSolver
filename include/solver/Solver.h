@@ -14,6 +14,10 @@ public:
         NONE,
         PUBLIC
     };
+    enum class AnalysisMode {
+        STANDARD,
+        HAND_ANALYSIS
+    };
     Solver();
     Solver(shared_ptr<GameTree> tree);
     shared_ptr<GameTree> getTree();

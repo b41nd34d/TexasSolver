@@ -3,6 +3,7 @@
 //
 
 #include "include/Card.h"
+#include "include/library.h"
 
 Card::Card(){this->card = "empty";}
 Card::Card(string card,int card_num_in_deck){

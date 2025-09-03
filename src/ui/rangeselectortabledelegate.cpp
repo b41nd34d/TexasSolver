@@ -1,11 +1,12 @@
 ﻿#include "include/ui/rangeselectortabledelegate.h"
+#include <QApplication>
 
 RangeSelectorTableDelegate::RangeSelectorTableDelegate(QStringList ranks,RangeSelectorTableModel *rangeSelectorTableModel,QObject *parent):WordItemDelegate(parent){
     this->rank_list = ranks;
     this->rangeSelectorTableModel = rangeSelectorTableModel;
 }
 
-void RangeSelectorTableDelegate::paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const{
+void RangeSelectorTableDelegate::paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const {
 
     painter->save();
     auto options = option;
@@ -28,13 +29,11 @@ void RangeSelectorTableDelegate::paint(QPainter *painter, const QStyleOptionView
     brush = QBrush(Qt::yellow);
     painter->fillRect(rect, brush);
 
-    QTextDocument doc;
-    doc.setHtml(options.text);
-
-    painter->translate(options.rect.left(), options.rect.top());
-    QRect clip(0, 0, options.rect.width(), options.rect.height());
     if(!this->rangeSelectorTableModel->in_thumbnail_mode()){
-        doc.drawContents(painter, clip);
+        // By default, the text is black. On a dark gray background, this is hard to see.
+        // We set the text color to the application's default text color for better visibility.
+        painter->setPen(QApplication::style()->standardPalette().color(QPalette::WindowText));
+        painter->drawText(option.rect, Qt::AlignCenter, options.text);
     }
     painter->restore();
 }

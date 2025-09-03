@@ -13,6 +13,7 @@
 #include "settingeditor.h"
 #include "include/ui/rangeselectortablemodel.h"
 #include "include/ui/rangeselectortabledelegate.h"
+#include <functional>
 
 namespace Ui {
 class MainWindow;
@@ -60,6 +61,8 @@ private slots:
 
 private:
     void clear_all_params();
+    void initializeParameterMap();
+    std::map<QString, std::function<void(const QString&)>> m_parameterSetters;
     Ui::MainWindow *ui = NULL;
     QSolverJob* qSolverJob = NULL;
     QFileSystemModel * qFileSystemModel = NULL;

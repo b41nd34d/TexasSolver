@@ -19,6 +19,7 @@ MainWindow::MainWindow(QWidget *parent) :
     connect(this->ui->actionexport, &QAction::triggered, this, &MainWindow::on_actionexport_triggered);
     connect(this->ui->actionclear_all, &QAction::triggered, this, &MainWindow::on_actionclear_all_triggered);
     qSolverJob = new QSolverJob;
+    initializeParameterMap();
     qSolverJob->setContext(this->getLogArea());
     qSolverJob->current_mission = QSolverJob::MissionType::LOADING;
     qSolverJob->start();
@@ -156,114 +157,62 @@ void MainWindow::import_from_file(QString fileName){
     QTextStream s1(&file);
     content.append(s1.readAll());
     this->clear_all_params();
-    for(QString one_line_content:content.split("\n")){
-        if(getParams(one_line_content,"set_pot") != "INVALID"){
-            this->ui->potText->setText(getParams(one_line_content,"set_pot"));
-        }
-        else if(getParams(one_line_content,"set_effective_stack") != "INVALID"){
-            this->ui->effectiveStackText->setText(getParams(one_line_content,"set_effective_stack"));
-        }
-        else if(getParams(one_line_content,"set_board") != "INVALID"){
-            this->ui->boardText->setText(getParams(one_line_content,"set_board"));
-        }
-        else if(getParams(one_line_content,"set_range_oop") != "INVALID"){
-            this->ui->oopRangeText->setText(getParams(one_line_content,"set_range_oop"));
-        }
-        else if(getParams(one_line_content,"set_range_ip") != "INVALID"){
-            this->ui->ipRangeText->setText(getParams(one_line_content,"set_range_ip"));
-        }
-        // FLOP
-        else if(getParams(one_line_content,"set_bet_sizes oop,flop,bet,") != "INVALID"){
-            this->ui->flop_oop_bet->setText(getParams(one_line_content,"set_bet_sizes oop,flop,bet,").replace(',',' '));
-        }
-        else if(getParams(one_line_content,"set_bet_sizes oop,flop,raise") != "INVALID"){
-            this->ui->flop_oop_raise->setText(getParams(one_line_content,"set_bet_sizes oop,flop,raise").replace(',',' '));
-        }
-        else if(getParams(one_line_content,"set_bet_sizes oop,flop,allin") != "INVALID"){
-            this->ui->flop_oop_allin->setChecked(true);
-        }
-        else if(getParams(one_line_content,"set_bet_sizes ip,flop,bet,") != "INVALID"){
-            this->ui->flop_ip_bet->setText(getParams(one_line_content,"set_bet_sizes ip,flop,bet,").replace(',',' '));
-        }
-        else if(getParams(one_line_content,"set_bet_sizes ip,flop,raise") != "INVALID"){
-            this->ui->flop_ip_raise->setText(getParams(one_line_content,"set_bet_sizes ip,flop,raise").replace(',',' '));
-        }
-        else if(getParams(one_line_content,"set_bet_sizes ip,flop,allin") != "INVALID"){
-            this->ui->flop_ip_allin->setChecked(true);
-        }
-        // TURN
-        else if(getParams(one_line_content,"set_bet_sizes oop,turn,bet,") != "INVALID"){
-            this->ui->turn_oop_bet->setText(getParams(one_line_content,"set_bet_sizes oop,turn,bet,").replace(',',' '));
-        }
-        else if(getParams(one_line_content,"set_bet_sizes oop,turn,raise") != "INVALID"){
-            this->ui->turn_oop_raise->setText(getParams(one_line_content,"set_bet_sizes oop,turn,raise").replace(',',' '));
-        }
-        else if(getParams(one_line_content,"set_bet_sizes oop,turn,donk") != "INVALID"){
-            this->ui->turn_oop_donk->setText(getParams(one_line_content,"set_bet_sizes oop,turn,donk").replace(',',' '));
-        }
-        else if(getParams(one_line_content,"set_bet_sizes oop,turn,allin") != "INVALID"){
-            this->ui->turn_oop_allin->setChecked(true);
-        }
-        else if(getParams(one_line_content,"set_bet_sizes ip,turn,bet,") != "INVALID"){
-            this->ui->turn_ip_bet->setText(getParams(one_line_content,"set_bet_sizes ip,turn,bet,").replace(',',' '));
-        }
-        else if(getParams(one_line_content,"set_bet_sizes ip,turn,raise") != "INVALID"){
-            this->ui->turn_ip_raise->setText(getParams(one_line_content,"set_bet_sizes ip,turn,raise").replace(',',' '));
-        }
-        else if(getParams(one_line_content,"set_bet_sizes ip,turn,allin") != "INVALID"){
-            this->ui->turn_ip_allin->setChecked(true);
-        }
-        // RIVER
-        else if(getParams(one_line_content,"set_bet_sizes oop,river,bet,") != "INVALID"){
-            this->ui->river_oop_bet->setText(getParams(one_line_content,"set_bet_sizes oop,river,bet,").replace(',',' '));
-        }
-        else if(getParams(one_line_content,"set_bet_sizes oop,river,raise") != "INVALID"){
-            this->ui->river_oop_raise->setText(getParams(one_line_content,"set_bet_sizes oop,river,raise").replace(',',' '));
-        }
-        else if(getParams(one_line_content,"set_bet_sizes oop,river,donk") != "INVALID"){
-            this->ui->river_oop_donk->setText(getParams(one_line_content,"set_bet_sizes oop,river,donk").replace(',',' '));
-        }
-        else if(getParams(one_line_content,"set_bet_sizes oop,river,allin") != "INVALID"){
-            this->ui->river_oop_allin->setChecked(true);
-        }
-        else if(getParams(one_line_content,"set_bet_sizes ip,river,bet,") != "INVALID"){
-            this->ui->river_ip_bet->setText(getParams(one_line_content,"set_bet_sizes ip,river,bet,").replace(',',' '));
-        }
-        else if(getParams(one_line_content,"set_bet_sizes ip,river,raise") != "INVALID"){
-            this->ui->river_ip_raise->setText(getParams(one_line_content,"set_bet_sizes ip,river,raise").replace(',',' '));
-        }
-        else if(getParams(one_line_content,"set_bet_sizes ip,river,allin") != "INVALID"){
-            this->ui->river_ip_allin->setChecked(true);
-        }
-        // OTHER PARAMS
-        else if(getParams(one_line_content,"set_allin_threshold") != "INVALID"){
-            this->ui->allinThresholdText->setText(getParams(one_line_content,"set_allin_threshold"));
-        }
-        else if(getParams(one_line_content,"set_thread_num") != "INVALID"){
-            this->ui->threadsText->setText(getParams(one_line_content,"set_thread_num"));
-        }
-        else if(getParams(one_line_content,"set_accuracy") != "INVALID"){
-            this->ui->exploitabilityText->setText(getParams(one_line_content,"set_accuracy"));
-        }
-        else if(getParams(one_line_content,"set_max_iteration") != "INVALID"){
-            this->ui->iterationText->setText(getParams(one_line_content,"set_max_iteration"));
-        }
-        else if(getParams(one_line_content,"set_print_interval") != "INVALID"){
-            this->ui->logIntervalText->setText(getParams(one_line_content,"set_print_interval"));
-        }
-        else if(getParams(one_line_content,"set_raise_limit") != "INVALID"){
-            this->ui->raiseLimitText->setText(getParams(one_line_content,"set_raise_limit"));
-        }
-        else if(getParams(one_line_content,"set_use_isomorphism") != "INVALID"){
-            if(getParams(one_line_content,"set_use_isomorphism") == "1"){
-                this->ui->useIsoCheck->setChecked(true);
-            }else{
-                this->ui->useIsoCheck->setChecked(false);
+    for(const QString& line : content.split("\n")) {
+        for (auto const& [key, setter] : m_parameterSetters) {
+            if (line.startsWith(key)) {
+                setter(getParams(line, key));
+                break; // Move to the next line once a key is matched
             }
         }
     }
     this->update();
 }
+
+void MainWindow::initializeParameterMap() {
+     // Using a map to make the import logic cleaner and more extensible.
+     m_parameterSetters = {
+         {"set_pot", [this](const QString& val){ this->ui->potText->setText(val); }},
+         {"set_effective_stack", [this](const QString& val){ this->ui->effectiveStackText->setText(val); }},
+         {"set_board", [this](const QString& val){ this->ui->boardText->setText(val); }},
+         {"set_range_oop", [this](const QString& val){ this->ui->oopRangeText->setText(val); }},
+         {"set_range_ip", [this](const QString& val){ this->ui->ipRangeText->setText(val); }},
+
+         // FLOP
+         {"set_bet_sizes oop,flop,bet,", [this](const QString& val){ this->ui->flop_oop_bet->setText(QString(val).replace(',', ' ')); }},
+         {"set_bet_sizes oop,flop,raise", [this](const QString& val){ this->ui->flop_oop_raise->setText(QString(val).replace(',', ' ')); }},
+         {"set_bet_sizes oop,flop,allin", [this](const QString&){ this->ui->flop_oop_allin->setChecked(true); }},
+         {"set_bet_sizes ip,flop,bet,", [this](const QString& val){ this->ui->flop_ip_bet->setText(QString(val).replace(',', ' ')); }},
+         {"set_bet_sizes ip,flop,raise", [this](const QString& val){ this->ui->flop_ip_raise->setText(QString(val).replace(',', ' ')); }},
+         {"set_bet_sizes ip,flop,allin", [this](const QString&){ this->ui->flop_ip_allin->setChecked(true); }},
+
+         // TURN
+         {"set_bet_sizes oop,turn,bet,", [this](const QString& val){ this->ui->turn_oop_bet->setText(QString(val).replace(',', ' ')); }},
+         {"set_bet_sizes oop,turn,raise", [this](const QString& val){ this->ui->turn_oop_raise->setText(QString(val).replace(',', ' ')); }},
+         {"set_bet_sizes oop,turn,donk", [this](const QString& val){ this->ui->turn_oop_donk->setText(QString(val).replace(',', ' ')); }},
+         {"set_bet_sizes oop,turn,allin", [this](const QString&){ this->ui->turn_oop_allin->setChecked(true); }},
+         {"set_bet_sizes ip,turn,bet,", [this](const QString& val){ this->ui->turn_ip_bet->setText(QString(val).replace(',', ' ')); }},
+         {"set_bet_sizes ip,turn,raise", [this](const QString& val){ this->ui->turn_ip_raise->setText(QString(val).replace(',', ' ')); }},
+         {"set_bet_sizes ip,turn,allin", [this](const QString&){ this->ui->turn_ip_allin->setChecked(true); }},
+
+         // RIVER
+         {"set_bet_sizes oop,river,bet,", [this](const QString& val){ this->ui->river_oop_bet->setText(QString(val).replace(',', ' ')); }},
+         {"set_bet_sizes oop,river,raise", [this](const QString& val){ this->ui->river_oop_raise->setText(QString(val).replace(',', ' ')); }},
+         {"set_bet_sizes oop,river,donk", [this](const QString& val){ this->ui->river_oop_donk->setText(QString(val).replace(',', ' ')); }},
+         {"set_bet_sizes oop,river,allin", [this](const QString&){ this->ui->river_oop_allin->setChecked(true); }},
+         {"set_bet_sizes ip,river,bet,", [this](const QString& val){ this->ui->river_ip_bet->setText(QString(val).replace(',', ' ')); }},
+         {"set_bet_sizes ip,river,raise", [this](const QString& val){ this->ui->river_ip_raise->setText(QString(val).replace(',', ' ')); }},
+         {"set_bet_sizes ip,river,allin", [this](const QString&){ this->ui->river_ip_allin->setChecked(true); }},
+
+         // OTHER PARAMS
+         {"set_allin_threshold", [this](const QString& val){ this->ui->allinThresholdText->setText(val); }},
+         {"set_thread_num", [this](const QString& val){ this->ui->threadsText->setText(val); }},
+         {"set_accuracy", [this](const QString& val){ this->ui->exploitabilityText->setText(val); }},
+         {"set_max_iteration", [this](const QString& val){ this->ui->iterationText->setText(val); }},
+         {"set_print_interval", [this](const QString& val){ this->ui->logIntervalText->setText(val); }},
+         {"set_raise_limit", [this](const QString& val){ this->ui->raiseLimitText->setText(val); }},
+         {"set_use_isomorphism", [this](const QString& val){ this->ui->useIsoCheck->setChecked(val == "1"); }}
+     };
+ }
 
 void MainWindow::on_actionimport_triggered(){
     QString fileName =  QFileDialog::getOpenFileName(
@@ -453,19 +402,33 @@ void MainWindow::on_buildTreeButtom_clicked()
 {
     qSolverJob->range_ip = this->ui->ipRangeText->toPlainText().toStdString();
     qSolverJob->range_oop = this->ui->oopRangeText->toPlainText().toStdString();
-    qSolverJob->board = this->ui->boardText->toPlainText().toStdString();
 
-    vector<string> board_str_arr = string_split(qSolverJob->board,',');
-    if(board_str_arr.size() == 3){
-        qSolverJob->current_round = 1;
-    }else if(board_str_arr.size() == 4){
-        qSolverJob->current_round = 2;
-    }else if(board_str_arr.size() == 5){
-        qSolverJob->current_round = 3;
+    if (this->ui->handAnalysisCheckBox->isChecked()) {
+        qSolverJob->analysis_mode = QSolverJob::AnalysisMode::HAND_ANALYSIS;
+        qSolverJob->full_board = this->ui->boardText->toPlainText().toStdString();
+        vector<string> full_board_str_arr = string_split(qSolverJob->full_board, ',');
+        if (full_board_str_arr.size() != 5) {
+            this->ui->logOutput->log_with_signal(tr("Hand Analysis Mode requires a full 5-card board (e.g., As,Kd,Th,7c,2d)."));
+            return;
+        }
+        qSolverJob->board = full_board_str_arr[0] + "," + full_board_str_arr[1] + "," + full_board_str_arr[2];
+        qSolverJob->current_round = 1; // Always start from the flop in analysis mode
     }else{
-        this->ui->logOutput->log_with_signal(QString::fromStdString(tfm::format("Error : board %s not recognized",qSolverJob->board)));
-        return;
+        qSolverJob->analysis_mode = QSolverJob::AnalysisMode::STANDARD;
+        qSolverJob->board = this->ui->boardText->toPlainText().toStdString();
+        vector<string> board_str_arr = string_split(qSolverJob->board,',');
+        if(board_str_arr.size() == 3){
+            qSolverJob->current_round = 1;
+        }else if(board_str_arr.size() == 4){
+            qSolverJob->current_round = 2;
+        }else if(board_str_arr.size() == 5){
+            qSolverJob->current_round = 3;
+        }else{
+            this->ui->logOutput->log_with_signal(QString::fromStdString(tfm::format("Error : board %s not recognized",qSolverJob->board)));
+            return;
+        }
     }
+
     qSolverJob->raise_limit = this->ui->raiseLimitText->text().toInt();
     qSolverJob->ip_commit = this->ui->potText->text().toFloat() / 2;
     qSolverJob->oop_commit = this->ui->potText->text().toFloat() / 2;

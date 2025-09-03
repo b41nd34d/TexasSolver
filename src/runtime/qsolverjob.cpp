@@ -96,10 +96,11 @@ void QSolverJob::stop(){
 
 void QSolverJob::solving(){
     // TODO  为什么ui上多次求解会积累memory？哪里leak了？
-    // TODO  为什么有时候会莫名闪退？
     qDebug().noquote() << tr("Start Solving..");//.toStdString() << std::endl;
 
     if(this->mode == Mode::HOLDEM){
+        this->ps_holdem.analysis_mode = static_cast<Solver::AnalysisMode>(this->analysis_mode);
+        this->ps_holdem.full_board = this->full_board;
         this->ps_holdem.train(
             this->range_ip,
             this->range_oop,
@@ -115,6 +116,8 @@ void QSolverJob::solving(){
             this->thread_number
         );
     }else if(this->mode == Mode::SHORTDECK){
+        this->ps_shortdeck.analysis_mode = static_cast<Solver::AnalysisMode>(this->analysis_mode);
+        this->ps_shortdeck.full_board = this->full_board;
         this->ps_shortdeck.train(
             this->range_ip,
             this->range_oop,

@@ -90,7 +90,9 @@ public:
             float accuracy,
             bool use_isomorphism,
             int use_halffloats,
-            int num_threads
+             int num_threads,
+             Solver::AnalysisMode analysis_mode,
+             const string& full_board
     );
     ~PCfrSolver();
     void train() override;
@@ -129,6 +131,9 @@ private:
     bool use_isomorphism;
     int use_halffloats;
     bool nowstop = false;
+     Solver::AnalysisMode analysis_mode;
+     vector<Card> full_board_cards;
+     uint64_t full_board_long;
 
     const vector<PrivateCards>& playerHands(int player);
     vector<vector<float>> getReachProbs();

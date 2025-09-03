@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 #include "include/compairer/Dic5Compairer.h"
+#include "include/solver/Solver.h"
 #include "include/tools/PrivateRangeConverter.h"
 #include "include/solver/CfrSolver.h"
 #include "include/solver/PCfrSolver.h"
@@ -52,6 +53,8 @@ public:
     vector<PrivateCards> player2Range;
     void dump_strategy(QString dump_file,int dump_rounds);
     shared_ptr<GameTree> get_game_tree(){return this->game_tree;};
+    Solver::AnalysisMode analysis_mode = Solver::AnalysisMode::STANDARD;
+    string full_board;
     Deck* get_deck(){return &this->deck;}
     shared_ptr<Solver> get_solver(){return this->solver;}
 private:

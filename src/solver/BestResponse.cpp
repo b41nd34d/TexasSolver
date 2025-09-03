@@ -9,8 +9,10 @@
 //#define DEBUG;
 
 BestResponse::BestResponse(vector<vector<PrivateCards>> &private_combos, int player_number,
-                           PrivateCardsManager &pcm, RiverRangeManager &rrm, Deck &deck, bool debug,int color_iso_offset[][4],GameTreeNode::GameRound split_round,int nthreads, int use_halffloats)
+                           PrivateCardsManager &pcm, RiverRangeManager &rrm, Deck &deck, bool debug,int color_iso_offset[][4],
+                           GameTreeNode::GameRound split_round,int nthreads, int use_halffloats, Solver::AnalysisMode analysis_mode, const vector<Card>& full_board_cards)
                            :rrm(rrm),pcm(pcm),private_combos(private_combos),deck(deck){
+    this->analysis_mode = analysis_mode;
     this->player_number = player_number;
     this->debug = debug;
 
@@ -23,6 +25,10 @@ BestResponse::BestResponse(vector<vector<PrivateCards>> &private_combos, int pla
     player_hands = vector<int>(player_number);
     for(int i = 0;i < player_number;i ++) {
         player_hands[i] = private_combos[i].size();
+    }
+    if (this->analysis_mode == Solver::AnalysisMode::HAND_ANALYSIS) {
+        this->full_board_cards = full_board_cards;
+        this->full_board_long = Card::boardCards2long(this->full_board_cards);
     }
     this->nthreads = nthreads;
     this->use_halffloats = use_halffloats;
@@ -116,6 +122,55 @@ vector<float>
 BestResponse::chanceBestReponse(shared_ptr<ChanceNode> node, int player,const vector<vector<float>>& reach_probs,
                                 uint64_t current_board, int deal) {
     vector<Card>& cards = this->deck.getCards();
+    if (this->analysis_mode == Solver::AnalysisMode::HAND_ANALYSIS) {
+        GameTreeNode::GameRound round = node->getRound();
+        Card next_card;
+        if (round == GameTreeNode::GameRound::TURN) {
+            if (full_board_cards.size() < 4) throw runtime_error("Hand analysis requires at least 4 board cards for flop->turn.");
+            next_card = full_board_cards[3];
+        } else if (round == GameTreeNode::GameRound::RIVER) {
+            if (full_board_cards.size() < 5) throw runtime_error("Hand analysis requires 5 board cards for turn->river.");
+            next_card = full_board_cards[4];
+        } else {
+            throw runtime_error("Hand analysis mode is only for post-flop chance nodes.");
+        }
+
+        int card_idx = next_card.getNumberInDeckInt();
+        uint64_t card_long = Card::boardInt2long(next_card.getCardInt());
+        uint64_t new_board_long = current_board | card_long;
+
+        vector<vector<float>> new_reach_probs(2);
+        new_reach_probs[player] = vector<float>(this->pcm.getPreflopCards(player).size());
+        new_reach_probs[1 - player] = vector<float>(this->pcm.getPreflopCards(1 - player).size());
+
+        int possible_deals = node->getCards().size() - Card::long2board(current_board).size() - 2;
+
+        for (int one_player = 0; one_player < 2; one_player++) {
+            for (size_t hand_idx = 0; hand_idx < this->pcm.getPreflopCards(one_player).size(); hand_idx++) {
+                uint64_t privateBoardLong = this->pcm.getPreflopCards(one_player)[hand_idx].toBoardLong();
+                if (Card::boardsHasIntercept(card_long, privateBoardLong)) {
+                    new_reach_probs[one_player][hand_idx] = 0;
+                } else {
+                    new_reach_probs[one_player][hand_idx] = reach_probs[one_player][hand_idx] / possible_deals;
+                }
+            }
+        }
+
+        int new_deal;
+        int card_num = this->deck.getCards().size();
+        if (deal == 0) {
+            new_deal = card_idx + 1;
+        } else if (deal > 0 && deal <= card_num) {
+            int origin_deal = deal - 1;
+            new_deal = card_num * origin_deal + card_idx;
+            new_deal += (1 + card_num);
+        } else {
+            // This case (dealing a 3rd card post-flop) shouldn't happen in Texas Hold'em.
+            throw runtime_error("Hand analysis with more than two dealt cards is not supported.");
+        }
+
+        return this->bestResponse(node->getChildren(), player, new_reach_probs, new_board_long, new_deal);
+    }
 
     int card_num = node->getCards().size();
     // 可能的发牌情况,2代表每个人的holecard是两张
@@ -130,7 +185,7 @@ BestResponse::chanceBestReponse(shared_ptr<ChanceNode> node, int player,const ve
     vector<vector<float>> results(node->getCards().size());
 
     #pragma omp parallel for
-    for(std::size_t card = 0;card < node->getCards().size();card ++) {
+    for(int card = 0; card < static_cast<int>(node->getCards().size()); card++) {
         shared_ptr<GameTreeNode> one_child = node->getChildren();
         Card one_card = node->getCards()[card];
         uint64_t card_long = Card::boardInt2long(one_card.getCardInt());
@@ -330,57 +385,56 @@ BestResponse::actionBestResponse(shared_ptr<ActionNode> node, int player, const 
 vector<float>
 BestResponse::terminalBestReponse(shared_ptr<TerminalNode> node, int player, const vector<vector<float>>& reach_probs,
                                   uint64_t board, int deal) {
-    uint64_t board_long = board;
     int oppo = 1 - player;
-    const vector<RiverCombs>& player_combs = this->rrm.getRiverCombos(player,this->pcm.getPreflopCards(player),board);  //this.river_combos[player];
-    const vector<RiverCombs>& oppo_combs = this->rrm.getRiverCombos(1 - player,this->pcm.getPreflopCards(1 - player),board);  //this.river_combos[player];
-
     float player_payoff = node->get_payoffs()[player];
 
-    vector<float> payoffs = vector<float>(this->player_hands[player]);
+    const vector<PrivateCards>& player_hands_vec = this->private_combos[player];
+    const vector<PrivateCards>& oppo_hands_vec = this->private_combos[oppo];
+    const vector<float>& oppo_reach_prob = reach_probs[oppo];
+
+    vector<float> payoffs(player_hands_vec.size());
 
 
 #ifdef DEBUG
     if(this->player_number != 2) throw runtime_error("player NE 2 not supported");
 #endif
     // 对手的手牌可能需要和其reach prob一样长
-    vector<float> oppo_card_sum(52);
+    vector<float> oppo_card_sum(52, 0.0f);
 
     //用于记录对手总共的手牌绝对prob之和
     float oppo_prob_sum = 0;
 
-    const vector<float>& oppo_reach_prob = reach_probs[1 - player];
-    for(std::size_t oppo_hand = 0;oppo_hand < oppo_combs.size(); oppo_hand ++){
-        const RiverCombs& one_hc = oppo_combs[oppo_hand];
-        uint64_t one_hc_long  = Card::boardInts2long(one_hc.private_cards.get_hands());
+    for(size_t i = 0; i < oppo_hands_vec.size(); ++i) {
+        const PrivateCards& oppo_hc = oppo_hands_vec[i];
+        uint64_t one_hc_long  = oppo_hc.toBoardLong();
 
         // 如果对手手牌和public card有重叠，那么这组牌不可能存在
-        if(Card::boardsHasIntercept(one_hc_long,board_long)){
+        if(Card::boardsHasIntercept(one_hc_long, board)){
             continue;
         }
 
-        oppo_prob_sum += oppo_reach_prob[one_hc.reach_prob_index];
-        oppo_card_sum[one_hc.private_cards.card1] += oppo_reach_prob[one_hc.reach_prob_index];
-        oppo_card_sum[one_hc.private_cards.card2] += oppo_reach_prob[one_hc.reach_prob_index];
+        oppo_prob_sum += oppo_reach_prob[i];
+        oppo_card_sum[oppo_hc.card1] += oppo_reach_prob[i];
+        oppo_card_sum[oppo_hc.card2] += oppo_reach_prob[i];
     }
 
 
-    for(std::size_t player_hand = 0;player_hand < player_combs.size();player_hand ++) {
-        const RiverCombs& player_hc = player_combs[player_hand];
-        uint64_t player_hc_long = Card::boardInts2long(player_hc.private_cards.get_hands());
-        if(Card::boardsHasIntercept(player_hc_long,board_long)){
-            payoffs[player_hand] = 0;
+    for(size_t i = 0; i < player_hands_vec.size(); ++i) {
+        const PrivateCards& player_hc = player_hands_vec[i];
+        uint64_t player_hc_long = player_hc.toBoardLong();
+        if(Card::boardsHasIntercept(player_hc_long, board)){
+            payoffs[i] = 0;
         }else{
-            int oppo_hand = this->pcm.indPlayer2Player(player,oppo,player_hc.reach_prob_index);
+            int oppo_hand = this->pcm.indPlayer2Player(player,oppo,i);
             float add_reach_prob;
             if(oppo_hand == -1){
                 add_reach_prob = 0;
             }else{
                 add_reach_prob = oppo_reach_prob[oppo_hand];
             }
-            payoffs[player_hc.reach_prob_index] = (oppo_prob_sum
-                                                   - oppo_card_sum[player_hc.private_cards.card1]
-                                                   - oppo_card_sum[player_hc.private_cards.card2]
+            payoffs[i] = (oppo_prob_sum
+                                                   - oppo_card_sum[player_hc.card1]
+                                                   - oppo_card_sum[player_hc.card2]
                                                    + add_reach_prob
                                                   ) * player_payoff;
         }
@@ -461,4 +515,3 @@ BestResponse::showdownBestResponse(shared_ptr<ShowdownNode> node, int player,con
     }
     return payoffs;
 }
-
