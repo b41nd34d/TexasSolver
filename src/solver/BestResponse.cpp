@@ -491,6 +491,7 @@ BestResponse::showdownBestResponse(shared_ptr<ShowdownNode> node, int player,con
     // 计算失败时的payoff
     float losssum = 0;
     vector<float> card_losssum(52);
+    fill(card_losssum.begin(), card_losssum.end(), 0);
 
     j = oppo_combs.size() - 1;
     for(int i = player_combs.size() - 1;i >= 0;i --){

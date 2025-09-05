@@ -1111,6 +1111,9 @@ vector<vector<vector<float>>> PCfrSolver::get_strategy(shared_ptr<ActionNode> no
         deal = new_deal;
     }
     shared_ptr<Trainable> trainable = node->getTrainable(deal,true,this->use_halffloats);
+    if (!trainable) {
+        return ret_strategy;
+    }
     json retjson = trainable->dump_strategy(false);;
 
     for(vector<int> one_exchange:exchange_color_list){
@@ -1195,6 +1198,9 @@ vector<vector<vector<float>>> PCfrSolver::get_evs(shared_ptr<ActionNode> node,ve
         deal = new_deal;
     }
     shared_ptr<Trainable> trainable = node->getTrainable(deal,true,this->use_halffloats);
+    if (!trainable) {
+        return ret_evs;
+    }
     json retjson = trainable->dump_evs();
 
     for(vector<int> one_exchange:exchange_color_list){

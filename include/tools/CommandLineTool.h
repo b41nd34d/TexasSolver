@@ -37,6 +37,7 @@ private:
     string range_ip;
     string range_oop;
     string board;
+    bool hand_analysis = false;
     float accuracy;
     int max_iteration=100;
     int use_isomorphism=0;

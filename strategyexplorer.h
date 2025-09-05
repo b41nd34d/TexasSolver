@@ -37,6 +37,7 @@ public:
     ~StrategyExplorer();
 
 private:
+    void initializeView();
     DetailWindowSetting detailWindowSetting;
     QTimer *timer;
     Ui::StrategyExplorer *ui;
@@ -48,8 +49,8 @@ private:
     RoughStrategyViewerModel * roughStrategyViewerModel;
     RoughStrategyItemDelegate * roughStrategyItemDelegate;
     vector<Card> cards;
-    void process_treeclick(TreeItem* treeitem);
-    void process_board(TreeItem* treeitem);
+    void process_treeclick(const TreeItem* treeitem);
+    void process_board(const TreeItem* treeitem);
 public slots:
     void item_expanded(const QModelIndex& index);
     void item_clicked(const QModelIndex& index);

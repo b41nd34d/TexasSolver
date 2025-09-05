@@ -23,7 +23,7 @@ void DetailItemDelegate::paint_strategy(QPainter *painter, const QStyleOptionVie
             detailViewerModel->tableStrategyModel->treeItem->m_treedata.lock()->getType() == GameTreeNode::GameTreeNode::ACTION){
         shared_ptr<GameTreeNode> node = detailViewerModel->tableStrategyModel->treeItem->m_treedata.lock();
         int strategy_number = 0;
-        if(this->detailWindowSetting->grid_i >= 0 && this->detailWindowSetting->grid_j >= 0){
+        if(this->detailWindowSetting->grid_i >= 0 && this->detailWindowSetting->grid_j >= 0 && !detailViewerModel->tableStrategyModel->ui_strategy_table.empty()){
            strategy_number = detailViewerModel->tableStrategyModel->ui_strategy_table[this->detailWindowSetting->grid_i][this->detailWindowSetting->grid_j].size();
         }
         int ind = index.row() * detailViewerModel->columns + index.column();
@@ -116,24 +116,24 @@ void DetailItemDelegate::paint_strategy(QPainter *painter, const QStyleOptionVie
             options.text = "";
             options.text += detailViewerModel->tableStrategyModel->cardint2card[card1].toFormattedHtml();
             options.text += detailViewerModel->tableStrategyModel->cardint2card[card2].toFormattedHtml();
-            options.text = "<h2 >" + options.text + "<\/h2>";
+            options.text = "<h2 >" + options.text + "</h2>";
             for(std::size_t i = 0;i < strategy.size();i ++){
                 GameActions one_action = gameActions[i];
                 float one_strategy = strategy[i] * 100;
                 if(one_action.getAction() ==  GameTreeNode::PokerActions::FOLD){
-                    options.text +=  QString(" <h5> %1 : %2\%<\/h5>").arg(tr("FOLD"),QString::number(one_strategy,'f',1));
+                    options.text +=  QString(" <h5> %1 : %2%</h5>").arg(tr("FOLD"),QString::number(one_strategy,'f',1));
                 }
                 else if(one_action.getAction() ==  GameTreeNode::PokerActions::CALL){
-                    options.text +=  QString(" <h5> %1 : %2\%<\/h5>").arg(tr("CALL"),QString::number(one_strategy,'f',1));
+                    options.text +=  QString(" <h5> %1 : %2%</h5>").arg(tr("CALL"),QString::number(one_strategy,'f',1));
                 }
                 else if(one_action.getAction() ==  GameTreeNode::PokerActions::CHECK){
-                    options.text +=  QString(" <h5> %1 : %2\%<\/h5>").arg(tr("CHECK"),QString::number(one_strategy,'f',1));
+                    options.text +=  QString(" <h5> %1 : %2%</h5>").arg(tr("CHECK"),QString::number(one_strategy,'f',1));
                 }
                 else if(one_action.getAction() ==  GameTreeNode::PokerActions::BET){
-                    options.text +=  QString(" <h5> %1 %2 : %3\%<\/h5>").arg(tr("BET"),QString::number(one_action.getAmount()),QString::number(one_strategy,'f',1));
+                    options.text +=  QString(" <h5> %1 %2 : %3%</h5>").arg(tr("BET"),QString::number(one_action.getAmount()),QString::number(one_strategy,'f',1));
                 }
                 else if(one_action.getAction() ==  GameTreeNode::PokerActions::RAISE){
-                    options.text +=  QString(" <h5> %1 %2 : %3\%<\/h5>").arg(tr("RAISE"),QString::number(one_action.getAmount()),QString::number(one_strategy,'f',1));
+                    options.text +=  QString(" <h5> %1 %2 : %3%</h5>").arg(tr("RAISE"),QString::number(one_action.getAmount()),QString::number(one_strategy,'f',1));
                 }
             }
         }
@@ -166,7 +166,7 @@ void DetailItemDelegate::paint_range(QPainter *painter, const QStyleOptionViewIt
             card_cords = detailViewerModel->tableStrategyModel->ui_p2_range[this->detailWindowSetting->grid_i][this->detailWindowSetting->grid_j];
         }
 
-        int ind = index.row() * detailViewerModel->columns + index.column();
+        size_t ind = static_cast<size_t>(index.row() * detailViewerModel->columns + index.column());
         if(ind < card_cords.size()){
             pair<int,int> cord = card_cords[ind];
             float range_number;
@@ -191,9 +191,9 @@ void DetailItemDelegate::paint_range(QPainter *painter, const QStyleOptionViewIt
             options.text = "";
             options.text += detailViewerModel->tableStrategyModel->cardint2card[cord.first].toFormattedHtml();
             options.text += detailViewerModel->tableStrategyModel->cardint2card[cord.second].toFormattedHtml();
-            options.text = "<h2>" + options.text + "<\/h2>";
+            options.text = "<h2>" + options.text + "</h2>";
 
-            options.text +=  QString(" <h2>%1<\/h2>").arg(QString::number(range_number,'f',3));
+            options.text +=  QString(" <h2>%1</h2>").arg(QString::number(range_number,'f',3));
         }
     }
 
@@ -217,7 +217,7 @@ void DetailItemDelegate::paint_evs(QPainter *painter, const QStyleOptionViewItem
         shared_ptr<GameTreeNode> node = detailViewerModel->tableStrategyModel->treeItem->m_treedata.lock();
         int strategy_number = 0;
         if(this->detailWindowSetting->grid_i >= 0 && this->detailWindowSetting->grid_j >= 0){
-           strategy_number = detailViewerModel->tableStrategyModel->ui_strategy_table[this->detailWindowSetting->grid_i][this->detailWindowSetting->grid_j].size();
+           strategy_number = static_cast<int>(detailViewerModel->tableStrategyModel->ui_strategy_table[this->detailWindowSetting->grid_i][this->detailWindowSetting->grid_j].size());
         }
         int ind = index.row() * detailViewerModel->columns + index.column();
 
@@ -320,25 +320,25 @@ void DetailItemDelegate::paint_evs(QPainter *painter, const QStyleOptionViewItem
             options.text = "";
             options.text += detailViewerModel->tableStrategyModel->cardint2card[card1].toFormattedHtml();
             options.text += detailViewerModel->tableStrategyModel->cardint2card[card2].toFormattedHtml();
-            options.text = "<h2>" + options.text + "<\/h2>";
+            options.text = "<h2>" + options.text + "</h2>";
             for(std::size_t i = 0;i < evs.size();i ++){
                 GameActions one_action = gameActions[i];
                 QString one_ev = evs[i] != evs[i]? tr("Can't calculate"):QString::number(evs[i],'f',1);
                 QString ev_str = tr("EV");
                 if(one_action.getAction() ==  GameTreeNode::PokerActions::FOLD){
-                    options.text +=  QString(" <h5> %1 %2: %3<\/h5>").arg(tr("FOLD"),ev_str,one_ev);
+                    options.text +=  QString(" <h5> %1 %2: %3</h5>").arg(tr("FOLD"),ev_str,one_ev);
                 }
                 else if(one_action.getAction() ==  GameTreeNode::PokerActions::CALL){
-                    options.text +=  QString(" <h5> %1 %2: %3<\/h5>").arg(tr("CALL"),ev_str,one_ev);
+                    options.text +=  QString(" <h5> %1 %2: %3</h5>").arg(tr("CALL"),ev_str,one_ev);
                 }
                 else if(one_action.getAction() ==  GameTreeNode::PokerActions::CHECK){
-                    options.text +=  QString(" <h5> %1 %2: %3<\/h5>").arg(tr("CHECK"),ev_str,one_ev);
+                    options.text +=  QString(" <h5> %1 %2: %3</h5>").arg(tr("CHECK"),ev_str,one_ev);
                 }
                 else if(one_action.getAction() ==  GameTreeNode::PokerActions::BET){
-                    options.text +=  QString(" <h5> %1 %2 %3: %4<\/h5>").arg(tr("BET"),QString::number(one_action.getAmount()),ev_str,one_ev);
+                    options.text +=  QString(" <h5> %1 %2 %3: %4</h5>").arg(tr("BET"),QString::number(one_action.getAmount()),ev_str,one_ev);
                 }
                 else if(one_action.getAction() ==  GameTreeNode::PokerActions::RAISE){
-                    options.text +=  QString(" <h5> %1 %2 %3: %4<\/h5>").arg(tr("RAISE"),QString::number(one_action.getAmount()),ev_str,one_ev);
+                    options.text +=  QString(" <h5> %1 %2 %3: %4</h5>").arg(tr("RAISE"),QString::number(one_action.getAmount()),ev_str,one_ev);
                 }
             }
         }
@@ -369,16 +369,16 @@ void DetailItemDelegate::paint_evs_only(QPainter *painter, const QStyleOptionVie
         shared_ptr<GameTreeNode> node = detailViewerModel->tableStrategyModel->treeItem->m_treedata.lock();
         int strategy_number = 0;
         if(this->detailWindowSetting->grid_i >= 0 && this->detailWindowSetting->grid_j >= 0){
-           strategy_number = detailViewerModel->tableStrategyModel->ui_strategy_table[this->detailWindowSetting->grid_i][this->detailWindowSetting->grid_j].size();
+           strategy_number = static_cast<int>(detailViewerModel->tableStrategyModel->ui_strategy_table[this->detailWindowSetting->grid_i][this->detailWindowSetting->grid_j].size());
         }
 
         vector<float> evs = detailViewerModel->tableStrategyModel->get_ev_grid(this->detailWindowSetting->grid_i,this->detailWindowSetting->grid_j);
         std::size_t ind = index.row() * detailViewerModel->columns + index.column();
 
-        if(ind < evs.size() and ind < strategy_number)
+        if(ind < evs.size() && ind < static_cast<size_t>(strategy_number))
         {
             float one_ev = evs[ind];
-            float normalized_ev = normalization_tanh(detailViewerModel->tableStrategyModel->get_solver()->stack,one_ev);
+            float normalized_ev = normalization_tanh(detailViewerModel->tableStrategyModel->get_qsolverjob()->stack,one_ev);
             //options.text += QString("</br>%1").arg(QString::number(normalized_ev));
 
             pair<int,int> strategy_ui_table = detailViewerModel->tableStrategyModel->ui_strategy_table[this->detailWindowSetting->grid_i][this->detailWindowSetting->grid_j][ind];
@@ -398,9 +398,9 @@ void DetailItemDelegate::paint_evs_only(QPainter *painter, const QStyleOptionVie
             options.text = "";
             options.text += detailViewerModel->tableStrategyModel->cardint2card[card1].toFormattedHtml();
             options.text += detailViewerModel->tableStrategyModel->cardint2card[card2].toFormattedHtml();
-            options.text = "<h2>" + options.text + "<\/h2>";
+            options.text = "<h2>" + options.text + "</h2>";
 
-            options.text +=  QString(" <h2>%1<\/h2>").arg(QString::number(one_ev,'f',3));
+            options.text +=  QString(" <h2>%1</h2>").arg(QString::number(one_ev,'f',3));
         }
     }
 

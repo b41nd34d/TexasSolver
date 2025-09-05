@@ -20,7 +20,7 @@ class Card {
         Card();
         explicit Card(string card,int card_number_in_deck);
         Card(string card);
-        string getCard();
+        string getCard() const;
         int getCardInt();
         bool empty();
         int getNumberInDeckInt();
@@ -44,7 +44,7 @@ class Card {
         static int suitToInt(char suit);
         static vector<string> getSuits();
         string toString();
-        string toFormattedString();
+        string toFormattedString() const;
         QString toFormattedHtml();
 };
 

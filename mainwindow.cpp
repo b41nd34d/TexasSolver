@@ -210,7 +210,8 @@ void MainWindow::initializeParameterMap() {
          {"set_max_iteration", [this](const QString& val){ this->ui->iterationText->setText(val); }},
          {"set_print_interval", [this](const QString& val){ this->ui->logIntervalText->setText(val); }},
          {"set_raise_limit", [this](const QString& val){ this->ui->raiseLimitText->setText(val); }},
-         {"set_use_isomorphism", [this](const QString& val){ this->ui->useIsoCheck->setChecked(val == "1"); }}
+         {"set_use_isomorphism", [this](const QString& val){ this->ui->useIsoCheck->setChecked(val == "1"); }},
+         {"set_hand_analysis", [this](const QString& val){ this->ui->handAnalysisCheckBox->setChecked(val == "1"); }}
      };
  }
 
@@ -316,6 +317,9 @@ void MainWindow::on_actionexport_triggered(){
         out << "set_use_isomorphism 1" << "\n";
     }else{
         out << "set_use_isomorphism 0" << "\n";
+    }
+    if(this->ui->handAnalysisCheckBox->isChecked()){
+        out << "set_hand_analysis 1" << "\n";
     }
     out << "start_solve";
     out << "\n";

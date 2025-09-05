@@ -26,12 +26,12 @@ uint64_t PrivateCards::toBoardLong() const {
     //return Card::boardInts2long(this->card_vec);
 }
 
-int PrivateCards::hashCode() {
+int PrivateCards::hashCode() const {
     return this->hash_code;
 }
 
 
-string PrivateCards::toString() {
+string PrivateCards::toString() const {
     if (card1 > card2) {
         return Card::intCard2Str(card1) + Card::intCard2Str(card2);
     }else{

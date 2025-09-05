@@ -23,7 +23,7 @@ bool Card::empty(){
     else return false;
 }
 
-string Card::getCard() {
+string Card::getCard() const {
     return this->card;
 }
 
@@ -222,7 +222,7 @@ string Card::toString() {
     return this->card;
 }
 
-string Card::toFormattedString() {
+string Card::toFormattedString() const {
     QString qString = QString::fromStdString(this->card);
     qString = qString.replace("c", "♣️");
     qString = qString.replace("d", "♦️");
