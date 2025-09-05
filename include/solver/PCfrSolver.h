@@ -100,6 +100,8 @@ public:
     json dumps(bool with_status,int depth) override;
     vector<vector<vector<float>>> get_strategy(shared_ptr<ActionNode> node,vector<Card> chance_cards) override;
     vector<vector<vector<float>>> get_evs(shared_ptr<ActionNode> node,vector<Card> chance_cards) override;
+
+    const vector<Card>& get_full_board_cards() const { return full_board_cards; }
 private:
     vector<vector<PrivateCards>> ranges;
     vector<PrivateCards> range1;

@@ -6,10 +6,30 @@
 TableStrategyModel::TableStrategyModel(QSolverJob *qSolverJob, DetailWindowSetting* setting, QObject *parent)
     : QAbstractItemModel(parent), qSolverJob(qSolverJob), detailWindowSetting(setting)
 {
-    ranklist = QString("A,K,Q,J,T,9,8,7,6,5,4,3,2").split(",");
-    if (qSolverJob && qSolverJob->get_solver() && qSolverJob->get_solver()->get_deck()) {
-        cardint2card = qSolverJob->get_solver()->get_deck()->getCards();
+    // This is the crucial part that was missing.
+    // We need to populate the cardint2card map so that the UI can later
+    // look up card objects from their integer IDs to display their names.
+    this->cardint2card.assign(52, Card());
+    if (this->qSolverJob && this->qSolverJob->get_solver()) {
+        Deck* deck = this->qSolverJob->get_solver()->get_deck();
+        if (deck) {
+            for (const Card& card : deck->getCards()) {
+                int card_int = card.getCardInt();
+                if (card_int >= 0 && card_int < 52) {
+                    this->cardint2card[card_int] = card;
+                }
+            }
+        }
     }
+    int valid_cards = 0;
+    for(const auto& card : this->cardint2card) {
+        if (!card.empty()) {
+            valid_cards++;
+        }
+    }
+    qDebug() << "[DEBUG] TableStrategyModel: Populated cardint2card with" << valid_cards << "cards.";
+
+    this->ranklist = (QStringList() << "A" << "K" << "Q" << "J" << "T" << "9" << "8" << "7" << "6" << "5" << "4" << "3" << "2");
     build_ui_tables();
 }
 
@@ -96,7 +116,33 @@ void TableStrategyModel::updateStrategyData() {
     current_strategy = solver->get_strategy(actionNode, chance_cards);
     current_evs = solver->get_evs(actionNode, chance_cards);
 
-    ui_strategy_table = (current_player == 0) ? ui_p1_range : ui_p2_range;
+    qDebug() << "[DEBUG] updateStrategyData: Received data from solver for node of type" << node->getType();
+    qDebug() << "  - current_strategy size:" << current_strategy.size();
+    if (!current_strategy.empty()) {
+        qDebug() << "  - current_strategy[0] size:" << current_strategy[0].size();
+    }
+    qDebug() << "  - current_evs size:" << current_evs.size();
+    if (!current_evs.empty()) {
+        qDebug() << "  - current_evs[0] size:" << current_evs[0].size();
+    }
+
+    // Determine which player's range to display based on the UI mode.
+    // This is the fix for the "0 combos found" bug. The previous logic was
+    // incomplete as it did not account for the user's selection.
+    int player_to_display = -1;
+    if (detailWindowSetting->mode == DetailWindowSetting::DetailWindowMode::RANGE_IP) {
+        player_to_display = 0; // IP is always player 0
+    } else if (detailWindowSetting->mode == DetailWindowSetting::DetailWindowMode::RANGE_OOP) {
+        player_to_display = 1; // OOP is always player 1
+    } else {
+        // For STRATEGY, EV, EV_ONLY modes, display the range of the current acting player.
+        player_to_display = current_player;
+    }
+
+    // Set the active strategy table based on the player to display.
+    this->ui_strategy_table = (player_to_display == 0)
+                              ? this->ui_p1_range
+                              : this->ui_p2_range;
 
     // Calculate the aggregated "total_strategy" for the rough view
     vector<vector<vector<float>>>& ev_data = current_evs;
@@ -191,6 +237,12 @@ void TableStrategyModel::build_ui_tables() {
             ui_p2_range[pos.first][pos.second].push_back({pc.card1, pc.card2});
         }
     }
+
+    qDebug() << "[DEBUG] TableStrategyModel: Built UI tables. Example cell sizes:";
+    qDebug() << "  - P1 AA (0,0) combos:" << ui_p1_range[0][0].size();
+    qDebug() << "  - P1 AKs (0,1) combos:" << ui_p1_range[0][1].size();
+    qDebug() << "  - P2 77 (7,7) combos:" << ui_p2_range[7][7].size();
+    qDebug() << "  - P2 T9s (4,5) combos:" << ui_p2_range[4][5].size();
 }
 
 vector<float> TableStrategyModel::get_ev_grid(int i, int j) const {

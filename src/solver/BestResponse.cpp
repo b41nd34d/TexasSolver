@@ -121,7 +121,7 @@ vector<float> BestResponse::bestResponse(shared_ptr<GameTreeNode> node, int play
 vector<float>
 BestResponse::chanceBestReponse(shared_ptr<ChanceNode> node, int player,const vector<vector<float>>& reach_probs,
                                 uint64_t current_board, int deal) {
-    vector<Card>& cards = this->deck.getCards();
+    const vector<Card>& cards = this->deck.getCards();
     if (this->analysis_mode == Solver::AnalysisMode::HAND_ANALYSIS) {
         GameTreeNode::GameRound round = node->getRound();
         Card next_card;
@@ -151,7 +151,7 @@ BestResponse::chanceBestReponse(shared_ptr<ChanceNode> node, int player,const ve
                 if (Card::boardsHasIntercept(card_long, privateBoardLong)) {
                     new_reach_probs[one_player][hand_idx] = 0;
                 } else {
-                    new_reach_probs[one_player][hand_idx] = reach_probs[one_player][hand_idx] / possible_deals;
+                    new_reach_probs[one_player][hand_idx] = reach_probs[one_player][hand_idx];
                 }
             }
         }

@@ -2,6 +2,7 @@
 // Created by Xuefeng Huang on 2020/1/28.
 //
 
+#include "include/Deck.h"
 #include "include/Card.h"
 #include "include/library.h"
 
@@ -18,25 +19,24 @@ Card::Card(string card){
     this->card_number_in_deck = -1;
 }
 
-bool Card::empty(){
-    if(this->card == "empty")return true;
-    else return false;
+bool Card::empty() const {
+    return this->card == "empty";
 }
 
 string Card::getCard() const {
     return this->card;
 }
 
-int Card::getCardInt() {
+int Card::getCardInt() const {
     return this->card_int;
 }
 
-int Card::getNumberInDeckInt(){
+int Card::getNumberInDeckInt() const {
     if(this->card_number_in_deck == -1)throw runtime_error("card number in deck cannot be -1");
     return this->card_number_in_deck;
 }
 
-int Card::card2int(Card card) {
+int Card::card2int(const Card& card) {
     return strCard2int(card.getCard());
 }
 
@@ -63,11 +63,11 @@ uint64_t Card::boardCards2long(vector<string> cards) {
     return Card::boardCards2long(cards_objs);
 }
 
-uint64_t Card::boardCard2long(Card& card){
+uint64_t Card::boardCard2long(const Card& card){
     return Card::boardInt2long(card.getCardInt());
 }
 
-uint64_t Card::boardCards2long(vector<Card>& cards){
+uint64_t Card::boardCards2long(const vector<Card>& cards){
     std::vector<int> board_int(cards.size());
     for(std::size_t i = 0;i < cards.size();i++){
         board_int[i] = Card::card2int(cards[i]);
@@ -75,7 +75,7 @@ uint64_t Card::boardCards2long(vector<Card>& cards){
     return Card::boardInts2long(board_int);
 }
 
-QString Card::boardCards2html(vector<Card>& cards){
+QString Card::boardCards2html(const vector<Card>& cards){
     QString ret_html = "";
     for(auto one_card:cards){
         if(one_card.empty())continue;
@@ -131,21 +131,22 @@ vector<int> Card::long2board(uint64_t board_long) {
     return board;
 }
 
-vector<Card> Card::long2boardCards(uint64_t board_long){
-        vector<int> board = long2board(board_long);
-        vector<Card> board_cards(board.size());
-        for(std::size_t i = 0;i < board.size();i ++){
-            int one_board = board[i];
-            board_cards[i] = Card(intCard2Str(one_board));
+vector<Card> Card::long2boardCards(uint64_t board_long, const Deck& deck){
+        vector<int> board_ints = long2board(board_long);
+        vector<Card> board_cards;
+        board_cards.reserve(board_ints.size());
+
+        for(int card_int : board_ints) {
+            // This lookup is necessary to get the fully-initialized card object
+            // from the deck, avoiding the "detached card" problem.
+            for(const Card& deck_card : deck.getCards()) {
+                if (deck_card.getCardInt() == card_int) {
+                    board_cards.push_back(deck_card);
+                    break;
+                }
+            }
         }
-        if (board_cards.size() < 1 || board_cards.size() > 7){
-            throw runtime_error(tfm::format("board length not correct, board length %s",board_cards.size()));
-        }
-        vector<Card> retval(board_cards.size());
-        for(std::size_t i = 0;i < board_cards.size();i ++){
-            retval[i] = board_cards[i];
-        }
-        return retval;
+        return board_cards;
 }
 
 string Card::suitToString(int suit)
@@ -218,28 +219,31 @@ vector<string> Card::getSuits(){
     return {"c","d","h","s"};
 }
 
-string Card::toString() {
+string Card::toString() const {
     return this->card;
 }
 
 string Card::toFormattedString() const {
     QString qString = QString::fromStdString(this->card);
-    qString = qString.replace("c", "♣️");
-    qString = qString.replace("d", "♦️");
-    qString = qString.replace("h", "♥️");
-    qString = qString.replace("s", "♠️");
+    // The original implementation was buggy as replace() returns a copy.
+    if (qString.endsWith('c')) return (qString.chopped(1) + QStringLiteral("♣️")).toStdString();
+    if (qString.endsWith('d')) return (qString.chopped(1) + QStringLiteral("♦️")).toStdString();
+    if (qString.endsWith('h')) return (qString.chopped(1) + QStringLiteral("♥️")).toStdString();
+    if (qString.endsWith('s')) return (qString.chopped(1) + QStringLiteral("♠️")).toStdString();
     return qString.toStdString();
 }
 
-QString Card::toFormattedHtml() {
+QString Card::toFormattedHtml() const {
     QString qString = QString::fromStdString(this->card);
-    if(qString.contains("c"))
-        qString = qString.replace("c", QString::fromLocal8Bit("<span style=\"color:black;\">&#9827;<\/span>"));
-    else if(qString.contains("d"))
-        qString = qString.replace("d", QString::fromLocal8Bit("<span style=\"color:red;\">&#9830;<\/span>"));
-    else if(qString.contains("h"))
-        qString = qString.replace("h", QString::fromLocal8Bit("<span style=\"color:red;\">&#9829;<\/span>"));
-    else if(qString.contains("s"))
-        qString = qString.replace("s", QString::fromLocal8Bit("<span style=\"color:black;\">&#9824;<\/span>"));
+    // The original implementation was buggy as replace() returns a copy and the else-if was fragile.
+    if (qString.isEmpty()) return qString;
+
+    QString rank = qString.left(qString.length() - 1);
+    QChar suit = qString.at(qString.length() - 1);
+
+    if(suit == QLatin1Char('c')) return rank + QLatin1String("<span style=\"color:black;\">&#9827;</span>");
+    if(suit == QLatin1Char('d')) return rank + QLatin1String("<span style=\"color:red;\">&#9830;</span>");
+    if(suit == QLatin1Char('h')) return rank + QLatin1String("<span style=\"color:red;\">&#9829;</span>");
+    if(suit == QLatin1Char('s')) return rank + QLatin1String("<span style=\"color:black;\">&#9824;</span>");
     return qString;
 }

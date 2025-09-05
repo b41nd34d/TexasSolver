@@ -3,6 +3,7 @@
 #include "qstandarditemmodel.h"
 #include <QComboBox>
 #include "include/Card.h"
+#include "include/solver/PCfrSolver.h"
 
 StrategyExplorer::StrategyExplorer(QWidget *parent,QSolverJob * qSolverJob) :
     QDialog(parent),
@@ -67,11 +68,6 @@ StrategyExplorer::StrategyExplorer(QWidget *parent,QSolverJob * qSolverJob) :
 StrategyExplorer::~StrategyExplorer()
 {
     delete ui;
-    delete this->delegate_strategy;
-    delete this->tableStrategyModel;
-    delete this->detailViewerModel;
-    delete this->roughStrategyViewerModel;
-    delete this->timer;
 }
 
 void StrategyExplorer::initializeView() {
@@ -81,18 +77,30 @@ void StrategyExplorer::initializeView() {
     this->cards.clear();
 
     if (qSolverJob->analysis_mode == QSolverJob::AnalysisMode::HAND_ANALYSIS) {
-        // In hand analysis mode, lock the turn and river cards to the specific hand.
-        vector<string> board_cards = string_split(qSolverJob->full_board, ',');
+        // In hand analysis mode, we must get the card objects directly from the solver
+        // to ensure they are fully initialized with their correct deck index.
+        // Creating them from a string here would result in "detached" cards that
+        // cause errors when their deck index is requested.
+        shared_ptr<PCfrSolver> solver = dynamic_pointer_cast<PCfrSolver>(qSolverJob->get_solver()->get_solver());
+        if (!solver) {
+            qDebug() << "Error: Could not get PCfrSolver instance in hand analysis mode.";
+            return;
+        }
 
-        if (board_cards.size() >= 4) {
-            Card turn_card(board_cards[3]);
+        // This uses the new public getter added to PCfrSolver.h
+        const vector<Card>& solver_board_cards = solver->get_full_board_cards();
+
+        if (solver_board_cards.size() >= 4) {
+            const Card& turn_card = solver_board_cards[3];
+            this->cards.push_back(turn_card); // Store a copy for local use
             ui->turnCardBox->addItem(QString::fromStdString(turn_card.toFormattedString()));
             ui->turnCardBox->setCurrentIndex(0);
             ui->turnCardBox->setEnabled(false);
             this->tableStrategyModel->setTrunCard(turn_card);
         }
-        if (board_cards.size() == 5) {
-            Card river_card(board_cards[4]);
+        if (solver_board_cards.size() == 5) {
+            const Card& river_card = solver_board_cards[4];
+            this->cards.push_back(river_card); // Store a copy for local use
             ui->riverCardBox->addItem(QString::fromStdString(river_card.toFormattedString()));
             ui->riverCardBox->setCurrentIndex(0);
             ui->riverCardBox->setEnabled(false);
@@ -157,18 +165,33 @@ void StrategyExplorer::item_expanded(const QModelIndex& index){
 void StrategyExplorer::process_board(const TreeItem* treeitem){
     vector<string> board_str_arr = string_split(this->qSolverJob->board,',');
     vector<Card> local_cards;
-    for(const string& one_board_str:board_str_arr){
-        local_cards.push_back(Card(one_board_str));
+
+    // Get the initial board cards (e.g. flop) by looking them up in the deck
+    // to ensure they are valid "attached" cards with a deck index.
+    Deck* deck = this->qSolverJob->get_solver()->get_deck();
+    for(const string& one_board_str : board_str_arr) {
+        bool found = false;
+        for(const Card& deck_card : deck->getCards()){
+            if(deck_card.getCard() == one_board_str){
+                local_cards.push_back(deck_card);
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            qDebug() << "Warning: board card not found in deck in process_board: " << QString::fromStdString(one_board_str);
+        }
     }
+
     if(treeitem != nullptr){
         if(treeitem->m_treedata.lock()->getRound() == GameTreeNode::GameRound::TURN && !this->tableStrategyModel->getTrunCard().empty()){
-            local_cards.push_back(Card(this->tableStrategyModel->getTrunCard()));
+            local_cards.push_back(this->tableStrategyModel->getTrunCard());
         }
         else if(treeitem->m_treedata.lock()->getRound() == GameTreeNode::GameRound::RIVER){
             if(!this->tableStrategyModel->getTrunCard().empty())
-                local_cards.push_back(Card(this->tableStrategyModel->getTrunCard()));
+                local_cards.push_back(this->tableStrategyModel->getTrunCard());
             if(!this->tableStrategyModel->getRiverCard().empty())
-                local_cards.push_back(Card(this->tableStrategyModel->getRiverCard()));
+                local_cards.push_back(this->tableStrategyModel->getRiverCard());
         }
     }
     this->ui->boardLabel->setText(QString("<b>%1: </b>").arg(tr("board")) + Card::boardCards2html(local_cards));
@@ -219,6 +242,12 @@ void StrategyExplorer::selection_changed(const QItemSelection &selected,
 
 void StrategyExplorer::on_turnCardBox_currentIndexChanged(int index)
 {
+    if (this->qSolverJob->analysis_mode == QSolverJob::AnalysisMode::HAND_ANALYSIS) {
+        // In hand analysis mode, the card is fixed and set during initialization.
+        // The combo box is disabled, so this should not be triggered by the user.
+        // The existing handler logic is incorrect for this mode.
+        return;
+    }
     if(index >= 0 && static_cast<size_t>(index) < this->cards.size()){
         this->tableStrategyModel->setTrunCard(this->cards[index]);
         this->tableStrategyModel->updateStrategyData();
@@ -233,6 +262,12 @@ void StrategyExplorer::on_turnCardBox_currentIndexChanged(int index)
 
 void StrategyExplorer::on_riverCardBox_currentIndexChanged(int index)
 {
+    if (this->qSolverJob->analysis_mode == QSolverJob::AnalysisMode::HAND_ANALYSIS) {
+        // In hand analysis mode, the card is fixed and set during initialization.
+        // The combo box is disabled, so this should not be triggered by the user.
+        // The existing handler logic is incorrect for this mode.
+        return;
+    }
     if(index >= 0 && static_cast<size_t>(index) < this->cards.size()){
         this->tableStrategyModel->setRiverCard(this->cards[index]);
         this->tableStrategyModel->updateStrategyData();
@@ -256,6 +291,27 @@ void StrategyExplorer::update_second(){
 void StrategyExplorer::onMouseMoveEvent(int i,int j){
     this->detailWindowSetting.grid_i = i;
     this->detailWindowSetting.grid_j = j;
+
+    // --- DEBUG START ---
+    if (i >= 0 && j >= 0) {
+        const auto& combos = this->tableStrategyModel->ui_strategy_table[i][j];
+        qDebug() << "[DEBUG] onMouseMoveEvent for cell (" << i << "," << j << "). Found" << combos.size() << "combos.";
+        if (!combos.empty()) {
+            const auto& first_combo = combos[0];
+            const auto& card_map = this->tableStrategyModel->cardint2card;
+            if (static_cast<size_t>(first_combo.first) < card_map.size() && static_cast<size_t>(first_combo.second) < card_map.size()) {
+                const Card& c1 = card_map[first_combo.first];
+                const Card& c2 = card_map[first_combo.second];
+                qDebug() << "  - First combo:" << c1.toString().c_str() << c2.toString().c_str()
+                         << "(ints:" << first_combo.first << "," << first_combo.second << ")";
+                qDebug() << "  - Card 1 empty:" << c1.empty() << ", Card 2 empty:" << c2.empty();
+            } else {
+                qDebug() << "  - First combo card ints out of range for card_map.";
+            }
+        }
+    }
+    // --- DEBUG END ---
+
     this->ui->detailView->viewport()->update();
     this->ui->strategyTableView->viewport()->update();
 }
