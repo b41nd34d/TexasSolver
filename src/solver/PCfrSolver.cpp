@@ -62,7 +62,7 @@ PCfrSolver::PCfrSolver(shared_ptr<GameTree> tree, vector<PrivateCards> range1, v
         vector<string> card_strs = string_split(full_board, ',');
         for (const string& one_card_str : card_strs) {
             bool found = false;
-            for(Card& deck_card : this->deck.getCards()){
+            for(const Card& deck_card : this->deck.getCards()){
                 if(deck_card.getCard() == one_card_str){
                     this->full_board_cards.push_back(deck_card);
                     found = true;
@@ -187,13 +187,10 @@ vector<int> PCfrSolver::getAllAbstractionDeal(int deal){
     } else if (deal > 0 && deal <= card_num){
         int origin_deal = int((deal - 1) / 4) * 4;
         for(int i = 0;i < 4;i ++){
-            int one_card = origin_deal + i + 1;
-
-            Card *first_card = const_cast<Card *>(&(this->deck.getCards()[origin_deal + i]));
-            uint64_t first_long = Card::boardInt2long(
-                    first_card->getCardInt());
+            const Card& first_card = this->deck.getCards()[origin_deal + i];
+            uint64_t first_long = Card::boardInt2long(first_card.getCardInt());
             if (Card::boardsHasIntercept(first_long, this->initial_board_long))continue;
-            all_deal.push_back(one_card);
+            all_deal.push_back(origin_deal + i + 1);
         }
     } else{
         //cout << "______________________" << endl;
@@ -204,17 +201,12 @@ vector<int> PCfrSolver::getAllAbstractionDeal(int deal){
         for(int i = 0;i < 4;i ++) {
             for(int j = 0;j < 4;j ++) {
                 if(first_deal == second_deal && i == j) continue;
-
-                Card *first_card = const_cast<Card *>(&(this->deck.getCards()[first_deal + i]));
-                uint64_t first_long = Card::boardInt2long(
-                        first_card->getCardInt());
+                const Card& first_card = this->deck.getCards()[first_deal + i];
+                uint64_t first_long = Card::boardInt2long(first_card.getCardInt());
                 if (Card::boardsHasIntercept(first_long, this->initial_board_long))continue;
-
-                Card *second_card = const_cast<Card *>(&(this->deck.getCards()[second_deal + j]));
-                uint64_t second_long = Card::boardInt2long(
-                        second_card->getCardInt());
+                const Card& second_card = this->deck.getCards()[second_deal + j];
+                uint64_t second_long = Card::boardInt2long(second_card.getCardInt());
                 if (Card::boardsHasIntercept(second_long, this->initial_board_long))continue;
-
                 int one_card = card_num * (first_deal + i) + (second_deal + j) + 1 + card_num;
                 //cout << ";" << this->deck.getCards()[first_deal + i].toString() << "," << this->deck.getCards()[second_deal + j].toString();
                 all_deal.push_back(one_card);
@@ -248,7 +240,7 @@ vector<float> PCfrSolver::cfr(int player, shared_ptr<GameTreeNode> node, const v
 vector<float>
 PCfrSolver::chanceUtility(int player, shared_ptr<ChanceNode> node, const vector<float> &reach_probs, int iter,
                          uint64_t current_board,int deal) {
-    vector<Card>& cards = this->deck.getCards();
+    const vector<Card>& cards = this->deck.getCards();
 
     if (this->analysis_mode == Solver::AnalysisMode::HAND_ANALYSIS) {
         GameTreeNode::GameRound round = node->getRound();
@@ -276,7 +268,7 @@ PCfrSolver::chanceUtility(int player, shared_ptr<ChanceNode> node, const vector<
             if (Card::boardsHasIntercept(card_long, one_private.toBoardLong())) {
                 new_reach_probs[player_hand] = 0;
             } else {
-                new_reach_probs[player_hand] = reach_probs[player_hand] / possible_deals;
+                new_reach_probs[player_hand] = reach_probs[player_hand];
             }
         }
 
@@ -331,9 +323,8 @@ PCfrSolver::chanceUtility(int player, shared_ptr<ChanceNode> node, const vector<
             int multiplier_num = 0;
             for (int i = 0; i < 4; i++) {
                 int i_card = card_base * 4 + i;
-                Card *one_card = const_cast<Card *>(&(node->getCards()[i_card]));
-                uint64_t card_long = Card::boardInt2long(
-                        one_card->getCardInt());
+                const Card& one_card = node->getCards()[i_card];
+                uint64_t card_long = Card::boardInt2long(one_card.getCardInt());
                 if (!Card::boardsHasIntercept(card_long, current_board)) {
                     multiplier_num += 1;
                 }
@@ -347,11 +338,11 @@ PCfrSolver::chanceUtility(int player, shared_ptr<ChanceNode> node, const vector<
 
     for(std::size_t card = 0;card < node->getCards().size();card ++) {
         shared_ptr<GameTreeNode> one_child = node->getChildren();
-        Card *one_card = const_cast<Card *>(&(node->getCards()[card]));
-        uint64_t card_long = Card::boardInt2long(one_card->getCardInt());//Card::boardCards2long(new Card[]{one_card});
+        const Card& one_card = node->getCards()[card];
+        uint64_t card_long = Card::boardInt2long(one_card.getCardInt());//Card::boardCards2long(new Card[]{one_card});
         if (Card::boardsHasIntercept(card_long, current_board)) continue;
         if (iter <= this->warmup && multiplier[card] == 0) continue;
-        if (this->color_iso_offset[deal][one_card->getCardInt() % 4] < 0) continue;
+        if (this->color_iso_offset[deal][one_card.getCardInt() % 4] < 0) continue;
         valid_cards.push_back(card);
     }
 
@@ -359,8 +350,8 @@ PCfrSolver::chanceUtility(int player, shared_ptr<ChanceNode> node, const vector<
     for(int valid_ind = 0; valid_ind < static_cast<int>(valid_cards.size()); valid_ind++) {
         int card = valid_cards[static_cast<size_t>(valid_ind)];
         shared_ptr<GameTreeNode> one_child = node->getChildren();
-        Card *one_card = const_cast<Card *>(&(node->getCards()[card]));
-        uint64_t card_long = Card::boardInt2long(one_card->getCardInt());//Card::boardCards2long(new Card[]{one_card});
+        const Card& one_card = node->getCards()[card];
+        uint64_t card_long = Card::boardInt2long(one_card.getCardInt());//Card::boardCards2long(new Card[]{one_card});
 
         uint64_t new_board_long = current_board | card_long;
         if (this->monteCarolAlg == MonteCarolAlg::PUBLIC) {
@@ -412,28 +403,28 @@ PCfrSolver::chanceUtility(int player, shared_ptr<ChanceNode> node, const vector<
             throw runtime_error(tfm::format("deal out of range : %s ",deal));
         }
         if(this->distributing_task && node->getRound() == this->split_round) {
-            results[one_card->getNumberInDeckInt()] = vector<float>(this->ranges[player].size());
+            results[one_card.getNumberInDeckInt()] = vector<float>(this->ranges[player].size());
             //TaskParams taskParams = TaskParams();
         }else {
             vector<float> child_utility = this->cfr(player, one_child, new_reach_probs, iter, new_board_long, new_deal);
-            results[one_card->getNumberInDeckInt()] = child_utility;
+            results[one_card.getNumberInDeckInt()] = child_utility;
         }
     }
 
     for(std::size_t card = 0;card < node->getCards().size();card ++) {
-        Card *one_card = const_cast<Card *>(&(node->getCards()[card]));
+        const Card& one_card = node->getCards()[card];
         vector<float> child_utility;
-        int offset = this->color_iso_offset[deal][one_card->getCardInt() % 4];
+        int offset = this->color_iso_offset[deal][one_card.getCardInt() % 4];
         if(offset < 0) {
-            int rank1 = one_card->getCardInt() % 4;
+            int rank1 = one_card.getCardInt() % 4;
             int rank2 = rank1 + offset;
 #ifdef DEBUG
             if(rank2 < 0) throw runtime_error("rank error");
 #endif
-            child_utility = results[one_card->getNumberInDeckInt() + offset];
+            child_utility = results[one_card.getNumberInDeckInt() + offset];
             exchange_color(child_utility,this->pcm.getPreflopCards(player),rank1,rank2);
         }else{
-            child_utility = results[one_card->getNumberInDeckInt()];
+            child_utility = results[one_card.getNumberInDeckInt()];
         }
         if(child_utility.empty())
             continue;
@@ -744,7 +735,7 @@ PCfrSolver::terminalUtility(int player, shared_ptr<TerminalNode> node, const vec
 
 void PCfrSolver::findGameSpecificIsomorphisms() {
     // hand isomorphisms
-    vector<Card> board_cards = Card::long2boardCards(this->initial_board_long);
+    vector<Card> board_cards = Card::long2boardCards(this->initial_board_long, this->deck);
     for(int i = 0;i <= 1;i ++){
         vector<PrivateCards>& range = i == 0?this->range1:this->range2;
         for(std::size_t i_range = 0;i_range < range.size();i_range ++) {
@@ -994,7 +985,7 @@ void PCfrSolver::reConvertJson(const shared_ptr<GameTreeNode>& node,json& strate
         json& dealcards = (*retval)["dealcards"];
         for(std::size_t i = 0;i < cards.size();i ++){
             vector<vector<int>> new_exchange_color_list(exchange_color_list);
-            Card& one_card = const_cast<Card &>(cards[i]);
+            const Card& one_card = cards[i];
             vector<string> new_prefix(prefix);
             new_prefix.push_back("Chance:" + one_card.toString());
 
@@ -1076,10 +1067,25 @@ vector<vector<vector<float>>> PCfrSolver::get_strategy(shared_ptr<ActionNode> no
         }
     }
 
-    vector<Card>& cards = this->deck.getCards();
+    vector<Card> relevant_chance_cards;
+    if (node->getRound() != this->root_round) {
+        // Determine how many chance cards are needed to get from the root street to the node's street.
+        int root_round_int = GameTreeNode::gameRound2int(this->root_round);
+        int node_round_int = GameTreeNode::gameRound2int(node->getRound());
+        int cards_to_take = node_round_int - root_round_int;
 
-    for(Card one_card: chance_cards){
+        if (cards_to_take > 0 && chance_cards.size() >= static_cast<size_t>(cards_to_take)) {
+            for (int i = 0; i < cards_to_take; ++i) {
+                relevant_chance_cards.push_back(chance_cards[i]);
+            }
+        }
+    }
+
+    const vector<Card>& cards = this->deck.getCards();
+
+    for(Card one_card: relevant_chance_cards){
         int card = one_card.getNumberInDeckInt();
+        if (card < 0) throw runtime_error("Card in get_strategy has no deck index: " + one_card.toString());
         int offset = this->color_iso_offset[deal][one_card.getCardInt() % 4];
         if(offset < 0) {
             for(std::size_t x = 0;x < cards.size();x ++){
@@ -1163,10 +1169,25 @@ vector<vector<vector<float>>> PCfrSolver::get_evs(shared_ptr<ActionNode> node,ve
         }
     }
 
-    vector<Card>& cards = this->deck.getCards();
+    vector<Card> relevant_chance_cards;
+    if (node->getRound() != this->root_round) {
+        // Determine how many chance cards are needed to get from the root street to the node's street.
+        int root_round_int = GameTreeNode::gameRound2int(this->root_round);
+        int node_round_int = GameTreeNode::gameRound2int(node->getRound());
+        int cards_to_take = node_round_int - root_round_int;
 
-    for(Card one_card: chance_cards){
+        if (cards_to_take > 0 && chance_cards.size() >= static_cast<size_t>(cards_to_take)) {
+            for (int i = 0; i < cards_to_take; ++i) {
+                relevant_chance_cards.push_back(chance_cards[i]);
+            }
+        }
+    }
+
+    const vector<Card>& cards = this->deck.getCards();
+
+    for(Card one_card: relevant_chance_cards){
         int card = one_card.getNumberInDeckInt();
+        if (card < 0) throw runtime_error("Card in get_evs has no deck index: " + one_card.toString());
         int offset = this->color_iso_offset[deal][one_card.getCardInt() % 4];
         if(offset < 0) {
             for(std::size_t x = 0;x < cards.size();x ++){

@@ -19,8 +19,3 @@ Deck::Deck(const vector<string>& ranks, const vector<string>& suits) {
         }
     }
 }
-
-vector<Card>& Deck::getCards() {
-    return this->cards;
-}
-
