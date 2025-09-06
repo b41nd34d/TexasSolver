@@ -83,6 +83,37 @@ QVariant TreeItem::data() const
     return "NodeError";
 }
 
+std::string TreeItem::getActionPath() const {
+    // The model's rootItem is a dummy. Its parent is nullptr.
+    // The first real node's parent is this dummy root.
+    if (!m_parentItem || !m_parentItem->m_parentItem) {
+        return "";
+    }
+
+    std::string path_segment;
+    // We need to get the parent's GameTreeNode to find out which action led to this item.
+    shared_ptr<GameTreeNode> parentNode = m_parentItem->m_treedata.lock();
+    shared_ptr<GameTreeNode> currentNode = m_treedata.lock();
+
+    if (parentNode && parentNode->getType() == GameTreeNode::GameTreeNodeType::ACTION) {
+        shared_ptr<ActionNode> parentActionNode = dynamic_pointer_cast<ActionNode>(parentNode);
+        const auto& actions = parentActionNode->getActions();
+        const auto& childrens = parentActionNode->getChildrens();
+        for (size_t i = 0; i < childrens.size(); ++i) {
+            if (childrens[i] == currentNode) {
+                path_segment = actions[i].toString() + "/";
+                break;
+            }
+        }
+    }
+    // CHANCE nodes are ignored in the path for locking purposes, so we just recurse.
+    else if (parentNode && parentNode->getType() == GameTreeNode::GameTreeNodeType::CHANCE) {
+        return m_parentItem->getActionPath();
+    }
+
+    return m_parentItem->getActionPath() + path_segment;
+}
+
 bool TreeItem::setParentItem(TreeItem *item)
 {
     m_parentItem = item;

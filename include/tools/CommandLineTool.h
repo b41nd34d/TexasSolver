@@ -33,7 +33,7 @@ private:
     float small_blind=0.5;
     float big_blind=1;
     float stack=20 + 5;
-    float allin_threshold = 0.67;
+    float allin_threshold = 0.67f;
     string range_ip;
     string range_oop;
     string board;

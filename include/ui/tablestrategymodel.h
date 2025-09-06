@@ -29,10 +29,10 @@ public:
     int rowCount(const QModelIndex &parent = QModelIndex()) const override;
     int columnCount(const QModelIndex &parent = QModelIndex()) const override;
     void setGameTreeNode(TreeItem* treeItem);
-    void setTrunCard(Card turn_card);
+    void setTurnCard(Card turn_card);
     void setRiverCard(Card river_card);
-    Card getTrunCard(){return turn_card;};
-    Card getRiverCard(){return river_card;};
+    Card getTurnCard() const;
+    Card getRiverCard() const;
     void updateStrategyData();
     const vector<pair<GameActions,float>> get_strategy(int i,int j) const;
     const vector<pair<GameActions,pair<float,float>>> get_total_strategy() const;
@@ -53,7 +53,7 @@ public:
 
 private:
     QSolverJob* qSolverJob;
-    void setupModelData();
+    void resetDynamicData();
     Card turn_card;
     Card river_card;
 

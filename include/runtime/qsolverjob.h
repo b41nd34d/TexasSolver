@@ -7,6 +7,8 @@
 #include <QTextEdit>
 #include <QPlainTextEdit>
 #include "qstextedit.h"
+#include "include/solver/solver_options.h"
+#include <optional>
 #include <QDebug>
 #include <QSettings>
 
@@ -39,7 +41,7 @@ public:
     float small_blind=0.5;
     float big_blind=1;
     float stack=20 + 5;
-    float allin_threshold = 0.67;
+    float allin_threshold = 0.67f;
     string range_ip;
     string range_oop;
     string board;
@@ -49,6 +51,9 @@ public:
     int use_halffloats=0;
     int print_interval=10;
     int dump_rounds = 2;
+    // Add these new members for analysis features
+    std::vector<LockedNode> locked_nodes;
+    std::optional<FullBoardSituation> full_board_situation;
     shared_ptr<GameTreeBuildingSettings> gtbs;
 
     PokerSolver* get_solver();

@@ -883,6 +883,23 @@ p, li { white-space: pre-wrap; }
           </property>
           <layout class="QVBoxLayout" name="verticalLayout_16">
            <item>
+            <widget class="QCheckBox" name="fullBoardAnalysisCheck">
+             <property name="text">
+              <string>Full Board Analysis</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="label_20">
+             <property name="text">
+              <string>Node Locking Rules (path; player; action; probability%):</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPlainTextEdit" name="nodeLockingText"/>
+           </item>
+           <item>
             <layout class="QHBoxLayout" name="horizontalLayout_22">
              <item>
               <widget class="QLabel" name="label_18">

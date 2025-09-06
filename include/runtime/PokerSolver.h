@@ -44,13 +44,15 @@ public:
             float accuracy,
             bool use_isomorphism,
             int use_halffloats,
-            int threads
+            int threads,
+            const vector<LockedNode>& locked_nodes,
+            const std::optional<FullBoardSituation>& full_board_situation
             );
     void stop();
     long long estimate_tree_memory(QString range1,QString range2,QString board);
     vector<PrivateCards> player1Range;
     vector<PrivateCards> player2Range;
-    void dump_strategy(QString dump_file,int dump_rounds);
+    void dump_strategy(QString dump_file,int dump_rounds = 2);
     shared_ptr<GameTree> get_game_tree(){return this->game_tree;};
     Deck* get_deck(){return &this->deck;}
     shared_ptr<Solver> get_solver(){return this->solver;}

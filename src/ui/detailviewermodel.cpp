@@ -2,6 +2,10 @@
 
 DetailViewerModel::DetailViewerModel(TableStrategyModel* tableStrategyModel, QObject *parent):QAbstractItemModel(parent){
     this->tableStrategyModel = tableStrategyModel;
+    // This connection is the key to fixing the crash. When the tableStrategyModel is
+    // about to be destroyed, it will emit a signal, and this lambda will set our
+    // pointer to nullptr, preventing any use-after-free errors.
+    connect(tableStrategyModel, &QObject::destroyed, this, [this](){ this->tableStrategyModel = nullptr; });
     this->columns = 4;
     this->rows = 3;
 }

@@ -3,7 +3,9 @@
 #include "stdio.h"
 #include "include/runtime/qsolverjob.h"
 #include <QFileDialog>
+#include <QRegularExpression>
 #include "include/library.h"
+#include "include/solver/solver_options.h"
 
 QSTextEdit* MainWindow::s_textEdit = 0;
 
@@ -71,13 +73,16 @@ QSTextEdit * MainWindow::get_logwindow(){
 
 MainWindow::~MainWindow()
 {
+    // qSolverJob is a QThread and was created without a parent,
+    // so we must manage its lifecycle manually.
     delete qSolverJob;
-    delete qFileSystemModel;
-    delete ip_delegate;
-    delete ip_model;
-    delete oop_delegate;
-    delete oop_model;
+
+    // The ui pointer is the only other one we need to manually delete.
     delete ui;
+
+    // All other QObject-derived members (qFileSystemModel, delegates, models)
+    // were created with `this` as their parent, so Qt will handle
+    // their deletion automatically.
 }
 
 void MainWindow::on_actionjson_triggered(){
@@ -412,6 +417,84 @@ void MainWindow::on_ip_range(QString range_text){
 
 void MainWindow::on_buttomSolve_clicked()
 {   
+    // --- Analysis Features ---
+
+    // 1. Parse Node Locking rules from the UI
+    std::vector<LockedNode> locked_nodes;
+    std::map<std::pair<std::string, int>, LockedNode> temp_locked_nodes_map;
+
+    QString node_locking_text = ui->nodeLockingText->toPlainText();
+    QStringList lines = node_locking_text.split('\n', Qt::SkipEmptyParts);
+
+    for (const QString& line : lines) {
+        QString trimmed_line = line.trimmed();
+        if (trimmed_line.startsWith('#') || trimmed_line.isEmpty()) {
+            continue; // Skip comments and empty lines
+        }
+
+        QStringList parts = trimmed_line.split(';', Qt::SkipEmptyParts);
+        if (parts.size() != 4) {
+            qDebug().noquote() << tr("Warning: Skipping invalid node lock rule (wrong format): ") << line;
+            continue;
+        }
+
+        std::string path = parts[0].trimmed().toStdString();
+        int player = parts[1].trimmed().toInt();
+        QString action_str = parts[2].trimmed().toLower();
+        double prob = parts[3].trimmed().toDouble() / 100.0; // Convert from percentage
+
+        Action action_key;
+        if (action_str == "f" || action_str == "fold") {
+            action_key = -1;
+        } else if (action_str == "c" || action_str == "check" || action_str == "call") {
+            action_key = 0;
+        } else if (action_str.startsWith("b_") || action_str.startsWith("bet_") || action_str.startsWith("bet ")) {
+            action_key = static_cast<Action>(action_str.split(QRegularExpression("[_ ]")).last().toFloat());
+        } else if (action_str.startsWith("r_") || action_str.startsWith("raise_") || action_str.startsWith("raise ")) {
+            action_key = static_cast<Action>(action_str.split(QRegularExpression("[_ ]")).last().toFloat());
+        } else {
+            qDebug().noquote() << tr("Warning: Skipping invalid action in node lock rule: ") << action_str;
+            continue;
+        }
+
+        auto map_key = std::make_pair(path, player);
+        temp_locked_nodes_map[map_key].node_path = path;
+        temp_locked_nodes_map[map_key].player_to_lock = player;
+        temp_locked_nodes_map[map_key].locked_strategy[action_key] = prob;
+    }
+
+    // Convert map to final vector and assign to the job
+    for (auto const& [key, val] : temp_locked_nodes_map) {
+        locked_nodes.push_back(val);
+    }
+    qSolverJob->locked_nodes = locked_nodes;
+
+    // 2. Check for Full Board Analysis
+    std::optional<FullBoardSituation> full_board_situation = std::nullopt;
+    if (ui->fullBoardAnalysisCheck->isChecked()) {
+        QString board_text = ui->boardText->toPlainText();
+        vector<string> board_str_arr = string_split(board_text.toStdString(), ',');
+
+        if (board_str_arr.size() == 5) {
+            FullBoardSituation situation;
+            for (const auto& card_str : board_str_arr) {
+                if (!card_str.empty()) {
+                    situation.board_cards.push_back(Card::strCard2int(card_str));
+                }
+            }
+            if (situation.board_cards.size() == 5) {
+                full_board_situation = situation;
+                qDebug().noquote() << tr("Full board analysis mode activated for board: ") << board_text;
+            } else {
+                 qDebug().noquote() << tr("Warning: Full board analysis enabled, but board does not contain 5 valid cards. Solving normally.");
+            }
+        } else {
+            qDebug().noquote() << tr("Warning: Full board analysis enabled, but board does not contain 5 cards. Solving normally.");
+        }
+    }
+    qSolverJob->full_board_situation = full_board_situation;
+
+    // --- Set Standard Solver Options ---
     qSolverJob->max_iteration = ui->iterationText->text().toInt();
     qSolverJob->accuracy = ui->exploitabilityText->text().toFloat();
     qSolverJob->print_interval = ui->logIntervalText->text().toInt();
@@ -453,18 +536,28 @@ void MainWindow::on_buildTreeButtom_clicked()
 {
     qSolverJob->range_ip = this->ui->ipRangeText->toPlainText().toStdString();
     qSolverJob->range_oop = this->ui->oopRangeText->toPlainText().toStdString();
-    qSolverJob->board = this->ui->boardText->toPlainText().toStdString();
 
-    vector<string> board_str_arr = string_split(qSolverJob->board,',');
-    if(board_str_arr.size() == 3){
-        qSolverJob->current_round = 1;
-    }else if(board_str_arr.size() == 4){
-        qSolverJob->current_round = 2;
-    }else if(board_str_arr.size() == 5){
-        qSolverJob->current_round = 3;
-    }else{
-        this->ui->logOutput->log_with_signal(QString::fromStdString(tfm::format("Error : board %s not recognized",qSolverJob->board)));
-        return;
+    QString full_board_text = this->ui->boardText->toPlainText();
+    vector<string> board_str_arr = string_split(full_board_text.toStdString(), ',');
+
+    if (ui->fullBoardAnalysisCheck->isChecked() && board_str_arr.size() >= 3) {
+        // In analysis mode, we build the tree from the flop, even if the full board is provided.
+        // The solver will use the full board to prune, but the tree structure starts at the flop.
+        qSolverJob->board = QString::fromStdString(board_str_arr[0] + "," + board_str_arr[1] + "," + board_str_arr[2]).toStdString();
+        qSolverJob->current_round = 1; // Force flop start
+    } else {
+        // Original logic for building trees from different streets
+        qSolverJob->board = full_board_text.toStdString();
+        if(board_str_arr.size() == 3){
+            qSolverJob->current_round = 1;
+        }else if(board_str_arr.size() == 4){
+            qSolverJob->current_round = 2;
+        }else if(board_str_arr.size() == 5){
+            qSolverJob->current_round = 3;
+        }else{
+            this->ui->logOutput->log_with_signal(QString::fromStdString(tfm::format("Error : board %s not recognized",qSolverJob->board)));
+            return;
+        }
     }
     qSolverJob->raise_limit = this->ui->raiseLimitText->text().toInt();
     qSolverJob->ip_commit = this->ui->potText->text().toFloat() / 2;

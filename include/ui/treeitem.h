@@ -4,6 +4,7 @@
 #include <QVector>
 #include <QVariant>
 #include "include/nodes/GameTreeNode.h"
+#include <string>
 #include "include/nodes/ActionNode.h"
 #include "include/nodes/ChanceNode.h"
 #include "include/nodes/TerminalNode.h"
@@ -29,6 +30,8 @@ public:
     int row() const;
     TreeItem *parentItem() { return m_parentItem; }
     bool removeChild(int row);
+    std::string getActionPath() const;
+
 
 private:
     QList<TreeItem*> m_childItems;

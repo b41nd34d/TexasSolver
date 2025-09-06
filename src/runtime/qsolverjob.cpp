@@ -96,7 +96,9 @@ void QSolverJob::stop(){
 
 void QSolverJob::solving(){
     // TODO  为什么ui上多次求解会积累memory？哪里leak了？
-    // TODO  为什么有时候会莫名闪退？
+    // TODO  为什么有时候会莫名闪退？    
+    // NOTE: This requires modifying the PokerSolver::train method to accept
+    // the new analysis parameters (locked_nodes and full_board_situation).
     qDebug().noquote() << tr("Start Solving..");//.toStdString() << std::endl;
 
     if(this->mode == Mode::HOLDEM){
@@ -112,7 +114,9 @@ void QSolverJob::solving(){
             this->accuracy,
             this->use_isomorphism,
             this->use_halffloats,
-            this->thread_number
+            this->thread_number,
+            this->locked_nodes,
+            this->full_board_situation
         );
     }else if(this->mode == Mode::SHORTDECK){
         this->ps_shortdeck.train(
@@ -127,7 +131,9 @@ void QSolverJob::solving(){
             this->accuracy,
             this->use_isomorphism,
             this->use_halffloats,
-            this->thread_number
+            this->thread_number,
+            this->locked_nodes,
+            this->full_board_situation
         );
     }
     qDebug().noquote() << tr("Solving done.");//.toStdString() << std::endl;

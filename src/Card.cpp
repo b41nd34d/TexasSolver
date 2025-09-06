@@ -26,11 +26,11 @@ string Card::getCard() {
     return this->card;
 }
 
-int Card::getCardInt() {
+int Card::getCardInt() const {
     return this->card_int;
 }
 
-int Card::getNumberInDeckInt(){
+int Card::getNumberInDeckInt() const {
     if(this->card_number_in_deck == -1)throw runtime_error("card number in deck cannot be -1");
     return this->card_number_in_deck;
 }
@@ -217,11 +217,11 @@ vector<string> Card::getSuits(){
     return {"c","d","h","s"};
 }
 
-string Card::toString() {
+string Card::toString() const {
     return this->card;
 }
 
-string Card::toFormattedString() {
+string Card::toFormattedString() const {
     QString qString = QString::fromStdString(this->card);
     qString = qString.replace("c", "♣️");
     qString = qString.replace("d", "♦️");
@@ -233,12 +233,12 @@ string Card::toFormattedString() {
 QString Card::toFormattedHtml() {
     QString qString = QString::fromStdString(this->card);
     if(qString.contains("c"))
-        qString = qString.replace("c", QString::fromLocal8Bit("<span style=\"color:black;\">&#9827;<\/span>"));
+        qString = qString.replace("c", QString::fromLocal8Bit("<span style=\"color:black;\">&#9827;</span>"));
     else if(qString.contains("d"))
-        qString = qString.replace("d", QString::fromLocal8Bit("<span style=\"color:red;\">&#9830;<\/span>"));
+        qString = qString.replace("d", QString::fromLocal8Bit("<span style=\"color:red;\">&#9830;</span>"));
     else if(qString.contains("h"))
-        qString = qString.replace("h", QString::fromLocal8Bit("<span style=\"color:red;\">&#9829;<\/span>"));
+        qString = qString.replace("h", QString::fromLocal8Bit("<span style=\"color:red;\">&#9829;</span>"));
     else if(qString.contains("s"))
-        qString = qString.replace("s", QString::fromLocal8Bit("<span style=\"color:black;\">&#9824;<\/span>"));
+        qString = qString.replace("s", QString::fromLocal8Bit("<span style=\"color:black;\">&#9824;</span>"));
     return qString;
 }
