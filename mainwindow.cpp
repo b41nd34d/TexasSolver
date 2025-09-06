@@ -144,6 +144,8 @@ void MainWindow::clear_all_params(){
     this->ui->logIntervalText->clear();
     this->ui->raiseLimitText->clear();
     this->ui->useIsoCheck->setChecked(false);
+    this->ui->nodeLockingText->clear();
+    this->ui->fullBoardAnalysisCheck->setChecked(false);
 }
 
 void MainWindow::import_from_file(QString fileName){
@@ -161,6 +163,7 @@ void MainWindow::import_from_file(QString fileName){
     QTextStream s1(&file);
     content.append(s1.readAll());
     this->clear_all_params();
+    QString node_locking_rules = "";
     for(QString one_line_content:content.split("\n")){
         if(getParams(one_line_content,"set_pot") != "INVALID"){
             this->ui->potText->setText(getParams(one_line_content,"set_pot"));
@@ -266,7 +269,19 @@ void MainWindow::import_from_file(QString fileName){
                 this->ui->useIsoCheck->setChecked(false);
             }
         }
+        else if(getParams(one_line_content,"set_full_board_analysis") != "INVALID"){
+            if(getParams(one_line_content,"set_full_board_analysis") == "1"){
+                this->ui->fullBoardAnalysisCheck->setChecked(true);
+            }else{
+                this->ui->fullBoardAnalysisCheck->setChecked(false);
+            }
+        }
+        else if(getParams(one_line_content,"add_node_lock_rule") != "INVALID"){
+            if (!node_locking_rules.isEmpty()) node_locking_rules.append("\n");
+            node_locking_rules.append(getParams(one_line_content,"add_node_lock_rule"));
+        }
     }
+    this->ui->nodeLockingText->setPlainText(node_locking_rules);
     this->update();
 }
 
@@ -373,6 +388,21 @@ void MainWindow::on_actionexport_triggered(){
     }else{
         out << "set_use_isomorphism 0" << "\n";
     }
+
+    if(this->ui->fullBoardAnalysisCheck->isChecked()){
+        out << "set_full_board_analysis 1" << "\n";
+    }else{
+        out << "set_full_board_analysis 0" << "\n";
+    }
+
+    QString node_locking_text = ui->nodeLockingText->toPlainText();
+    QStringList lines = node_locking_text.split('\n', Qt::SkipEmptyParts);
+    for (const QString& line : lines) {
+        QString trimmed_line = line.trimmed();
+        if (trimmed_line.startsWith('#') || trimmed_line.isEmpty()) continue;
+        out << "add_node_lock_rule " << trimmed_line << "\n";
+    }
+
     out << "start_solve";
     out << "\n";
 

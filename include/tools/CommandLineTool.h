@@ -9,6 +9,8 @@
 #include <iostream>
 #include <fstream>
 #include "include/runtime/PokerSolver.h"
+#include "include/solver/solver_options.h"
+#include <map>
 
 using namespace std;
 class CommandLineTool{
@@ -18,6 +20,7 @@ public:
     void execFromFile(string input_file);
     void processCommand(string input);
 private:
+    void parseAndAddNodeLockRule(const std::string& rule_line);
     enum Mode{
         HOLDEM,
         SHORTDECK
@@ -42,6 +45,9 @@ private:
     int use_isomorphism=0;
     int print_interval=10;
     int dump_rounds = 1;
+    // Add these new members for analysis features
+    bool m_use_full_board_analysis = false;
+    std::map<std::pair<std::string, int>, LockedNode> m_locked_nodes_map;
     shared_ptr<GameTreeBuildingSettings> gtbs;
 };
 

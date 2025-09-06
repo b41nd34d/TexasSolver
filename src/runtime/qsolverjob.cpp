@@ -1,6 +1,5 @@
 ﻿#include "include/runtime/qsolverjob.h"
 
-
 using namespace std;
 
 void QSolverJob:: setContext(QSTextEdit * textEdit){
@@ -95,11 +94,19 @@ void QSolverJob::stop(){
 }
 
 void QSolverJob::solving(){
-    // TODO  为什么ui上多次求解会积累memory？哪里leak了？
-    // TODO  为什么有时候会莫名闪退？    
-    // NOTE: This requires modifying the PokerSolver::train method to accept
-    // the new analysis parameters (locked_nodes and full_board_situation).
     qDebug().noquote() << tr("Start Solving..");//.toStdString() << std::endl;
+
+    // --- Pre-solve Logging ---
+    if (this->full_board_situation.has_value()) {
+        qDebug() << "QSolverJob: Full board analysis is ENABLED.";
+    } else {
+        qDebug() << "QSolverJob: Full board analysis is DISABLED.";
+    }
+    if (!this->locked_nodes.empty()) {
+        qDebug() << "QSolverJob: Node locking is ENABLED with" << this->locked_nodes.size() << "rules.";
+    } else {
+        qDebug() << "QSolverJob: Node locking is DISABLED.";
+    }
 
     if(this->mode == Mode::HOLDEM){
         this->ps_holdem.train(
@@ -115,7 +122,7 @@ void QSolverJob::solving(){
             this->use_isomorphism,
             this->use_halffloats,
             this->thread_number,
-            this->locked_nodes,
+            this->locked_nodes, // Pass locked nodes to the solver
             this->full_board_situation
         );
     }else if(this->mode == Mode::SHORTDECK){
@@ -132,7 +139,7 @@ void QSolverJob::solving(){
             this->use_isomorphism,
             this->use_halffloats,
             this->thread_number,
-            this->locked_nodes,
+            this->locked_nodes, // Pass locked nodes to the solver
             this->full_board_situation
         );
     }

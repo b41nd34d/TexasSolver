@@ -153,12 +153,11 @@ StrategyExplorer::~StrategyExplorer()
 }
 
 void StrategyExplorer::item_expanded(const QModelIndex& index){
-    TreeItem *item = static_cast<TreeItem*>(index.internalPointer());
-    int num_child = item->childCount();
-    for (int i = 0;i < num_child;i ++){
-        TreeItem* one_child = item->child(i);
-        if(one_child->childCount() != 0)continue;
-        this->ui->gameTreeView->tree_model->reGenerateTreeItem(one_child->m_treedata.lock()->getRound(),one_child);
+    // The logic for populating child nodes has been moved into the TreeModel
+    // to resolve the protected member access error. We just need to trigger it.
+    // Note: You will need to replace 'dynamic_cast' with the actual type of your model.
+    if (auto* model = dynamic_cast<TreeModel*>(this->ui->gameTreeView->model())) {
+        model->populate(index);
     }
 }
 

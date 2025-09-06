@@ -95,9 +95,9 @@ public:
     ~PCfrSolver();
     void train(const vector<LockedNode>& locked_nodes, const std::optional<FullBoardSituation>& full_board) override;
     void stop() override;
-    json dumps(bool with_status,int depth) override;
-    vector<vector<vector<float>>> get_strategy(shared_ptr<ActionNode> node,vector<Card> chance_cards, const std::string& path) override;
-    vector<vector<vector<float>>> get_evs(shared_ptr<ActionNode> node,vector<Card> chance_cards, const std::string& path) override;
+    json dumps(bool with_status, int depth) override;
+    ActionStrategy get_strategy(shared_ptr<ActionNode> node, vector<Card> chance_cards, const std::string& path) override;
+    ActionEVs get_evs(shared_ptr<ActionNode> node, vector<Card> chance_cards, const std::string& path) override;
 private:
     // New members for analysis features
     map<string, const LockedNode*> m_locked_nodes_map;

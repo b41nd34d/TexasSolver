@@ -292,9 +292,6 @@ PCfrSolver::chanceUtility(int player, shared_ptr<ChanceNode> node, const vector<
         // has sequential chance nodes for multi-card streets like the flop.
         if (node->getRound() == GameTreeNode::GameRound::FLOP && full_board_cards.size() >= 3) {
             size_t num_dealt_on_street = num_cards_on_board - this->initial_board.size();
-            if (iter == 0) {
-                qDebug().noquote() << "FLOP analysis: num_cards_on_board=" << num_cards_on_board << "initial_board.size()=" << this->initial_board.size() << "num_dealt_on_street=" << num_dealt_on_street;
-            }
             if (num_dealt_on_street < 3) {
                 card_to_deal_int = full_board_cards[num_dealt_on_street];
             }
@@ -306,7 +303,7 @@ PCfrSolver::chanceUtility(int player, shared_ptr<ChanceNode> node, const vector<
 
         if (card_to_deal_int != -1) {
             if (iter == 0) { // Log only on first iteration
-                qDebug().noquote() << "Pruning chance node at round" << node->getRound() << ". Dealing only card:" << Card::intCard2Str(card_to_deal_int).c_str();
+                qDebug().noquote() << "ANALYSIS: Pruning chance node at round" << node->getRound() << ". Dealing only card:" << Card::intCard2Str(card_to_deal_int).c_str();
             }
             for (size_t i = 0; i < node->getCards().size(); ++i) {
                 if (node->getCards()[i].getCardInt() == card_to_deal_int) {
@@ -316,6 +313,14 @@ PCfrSolver::chanceUtility(int player, shared_ptr<ChanceNode> node, const vector<
                     }
                     break; // Found our specific card
                 }
+            }
+            // If we are in full board mode and didn't find a valid card to deal,
+            // it means this path is inconsistent with the analysis. Prune it.
+            if (valid_cards.empty()) {
+                if (iter == 0) {
+                    qDebug().noquote() << "ANALYSIS: Pruning branch. Could not find card" << Card::intCard2Str(card_to_deal_int).c_str() << "to deal at round" << node->getRound();
+                }
+                return chance_utility; // Return empty/zero utility
             }
         }
     } else { // Not in full board mode, use original logic.
@@ -528,20 +533,38 @@ PCfrSolver::actionUtility(int player, shared_ptr<ActionNode> node, const vector<
 
     vector<vector<float>> all_action_utility(actions.size());
 
-    vector<vector<float>> results(actions.size());
+    vector<vector<float>> results(actions.size(), vector<float>(this->ranges[player].size(), 0.0f));
     for (std::size_t action_id = 0; action_id < actions.size(); action_id++) {
         string next_path = path + actions[action_id].toString() + "/";
 
         if (node_player != player) {
             vector<float> new_reach_prob = vector<float>(reach_probs.size());
+            bool is_action_possible = false;
             for (std::size_t hand_id = 0; hand_id < new_reach_prob.size(); hand_id++) {
                 float strategy_prob = current_strategy[hand_id + action_id * node_player_private_cards.size()];
                 new_reach_prob[hand_id] = reach_probs[hand_id] * strategy_prob;
+                if (new_reach_prob[hand_id] > 0) {
+                    is_action_possible = true;
+                }
             }
-            //#pragma omp task shared(results,action_id)
+            if (!is_action_possible) {
+                continue; // Prune this branch
+            }
             results[action_id] = this->cfr(player, children[action_id], new_reach_prob, iter, current_board, deal, next_path);
         }else {
-            //#pragma omp task shared(results,action_id)
+            // Pruning for the current player. If an action has 0% probability for all hands,
+            // it won't contribute to the final payoff, and we don't need to calculate its utility.
+            bool is_action_possible = false;
+            for (size_t hand_id = 0; hand_id < node_player_private_cards.size(); ++hand_id) {
+                if (current_strategy[hand_id + action_id * node_player_private_cards.size()] > 1e-6) {
+                    is_action_possible = true;
+                    break;
+                }
+            }
+
+            if (!is_action_possible) {
+                continue; // Prune this branch
+            }
             results[action_id] = this->cfr(player, children[action_id], reach_probs, iter, current_board, deal, next_path);
         }
 
@@ -847,6 +870,11 @@ void PCfrSolver::stop() {
 
 void PCfrSolver::train(const vector<LockedNode>& locked_nodes, const std::optional<FullBoardSituation>& full_board) {
     this->m_locked_nodes_map.clear();
+    if (full_board.has_value()) {
+        qDebug() << "PCfrSolver::train received full_board_situation.";
+    } else {
+        qDebug() << "PCfrSolver::train did NOT receive full_board_situation.";
+    }
     if (!locked_nodes.empty()) {
         qDebug().noquote() << "Node locking enabled for" << locked_nodes.size() << "rules.";
         for (const auto& locked_node : locked_nodes) {
@@ -1103,18 +1131,21 @@ void PCfrSolver::reConvertJson(const shared_ptr<GameTreeNode>& node,json& strate
     }
 }
 
-vector<vector<vector<float>>> PCfrSolver::get_strategy(shared_ptr<ActionNode> node,vector<Card> chance_cards, const std::string& path){
+ActionStrategy PCfrSolver::get_strategy(shared_ptr<ActionNode> node,vector<Card> chance_cards, const std::string& path){
+    ActionStrategy result;
+    result.actions = node->getActions(); // Always use the full set of actions from the node.
+    result.strategy_per_hand.assign(52, vector<vector<float>>(52, vector<float>(result.actions.size(), 0.0f)));
+
     // Check for locked node first, and return the fixed strategy if found.
     auto it = m_locked_nodes_map.find(path);
     if (it != m_locked_nodes_map.end() && it->second->player_to_lock == node->getPlayer()) {
-        vector<vector<vector<float>>> ret_strategy(52, vector<vector<float>>(52));
+        result.strategy_per_hand.assign(52, vector<vector<float>>(52, vector<float>(result.actions.size(), 0.0f)));
         const Strategy& locked_strategy = it->second->locked_strategy;
-        const auto& actions = node->getActions();
 
         for (const auto& private_card : ranges[node->getPlayer()]) {
-            vector<float> hand_strategy(actions.size(), 0.0f);
-            for (size_t action_id = 0; action_id < actions.size(); ++action_id) {
-                const GameActions& game_action = actions[action_id];
+            vector<float> hand_strategy(result.actions.size(), 0.0f); // Sized to full action list, init to 0
+            for (size_t i = 0; i < result.actions.size(); ++i) {
+                const GameActions& game_action = result.actions.at(i);
                 Action locked_action_key;
                 switch(game_action.getAction()) {
                     case GameTreeNode::PokerActions::FOLD: locked_action_key = -1; break;
@@ -1122,24 +1153,22 @@ vector<vector<vector<float>>> PCfrSolver::get_strategy(shared_ptr<ActionNode> no
                     case GameTreeNode::PokerActions::CALL: locked_action_key = 0; break;
                     case GameTreeNode::PokerActions::BET:
                     case GameTreeNode::PokerActions::RAISE: locked_action_key = static_cast<Action>(game_action.getAmount()); break;
-                    default: continue; // Should not happen
+                    default: continue;
                 }
                 auto strat_it = locked_strategy.find(locked_action_key);
                 if (strat_it != locked_strategy.end()) {
-                    hand_strategy[action_id] = strat_it->second;
+                    hand_strategy.at(i) = strat_it->second;
                 }
             }
-            ret_strategy[private_card.card1][private_card.card2] = hand_strategy;
+            result.strategy_per_hand[private_card.card1][private_card.card2] = hand_strategy;
         }
-        return ret_strategy;
+        return result;
     }
 
     // --- Original logic if node is not locked ---
     int deal = 0;
     int card_num = this->deck.getCards().size();
     vector<vector<int>> exchange_color_list;
-
-    vector<vector<vector<float>>> ret_strategy = vector<vector<vector<float>>>(52);
 
     vector<Card>& cards = this->deck.getCards();
 
@@ -1206,24 +1235,18 @@ vector<vector<vector<float>>> PCfrSolver::get_strategy(shared_ptr<ActionNode> no
             }
         }
         if(intercept) continue;
-        ret_strategy[pc.card1][pc.card2] = one_strategy;
+        result.strategy_per_hand[pc.card1][pc.card2] = one_strategy;
     }
-    return ret_strategy;
+    return result;
 }
 
-vector<vector<vector<float>>> PCfrSolver::get_evs(shared_ptr<ActionNode> node,vector<Card> chance_cards, const std::string& path){
-    // If solving process has not finished, then no evs is set, therefore we shouldn't return anything
+ActionEVs PCfrSolver::get_evs(shared_ptr<ActionNode> node,vector<Card> chance_cards, const std::string& path){
+    ActionEVs result;
+    result.actions = node->getActions(); // For now, EV actions always match node actions
+    result.evs_per_hand.assign(52, vector<vector<float>>(52, vector<float>(result.actions.size(), 0.0f)));
     int deal = 0;
     int card_num = this->deck.getCards().size();
     vector<vector<int>> exchange_color_list;
-
-    vector<vector<vector<float>>> ret_evs = vector<vector<vector<float>>>(52);
-    for(int i = 0;i < 52;i ++){
-        ret_evs[i] = vector<vector<float>>(52);
-        for(int j = 0;j < 52;j ++){
-            ret_evs[i][j] = vector<float>();
-        }
-    }
 
     vector<Card>& cards = this->deck.getCards();
 
@@ -1290,9 +1313,9 @@ vector<vector<vector<float>>> PCfrSolver::get_evs(shared_ptr<ActionNode> node,ve
             }
         }
         if(intercept) continue;
-        ret_evs[pc.card1][pc.card2] = one_evs;
+        result.evs_per_hand[pc.card1][pc.card2] = one_evs;
     }
-    return ret_evs;
+    return result;
 }
 
 json PCfrSolver::dumps(bool with_status,int depth) {

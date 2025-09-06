@@ -131,6 +131,7 @@ void TableStrategyModel::resetDynamicData()
     this->current_strategy.clear();
     this->current_evs.clear();
     this->p1_range.assign(52, vector<float>(52, 0.0f));
+    this->current_actions.clear();
     this->p2_range.assign(52, vector<float>(52, 0.0f));
 }
 
@@ -185,15 +186,17 @@ void TableStrategyModel::updateStrategyData(){
             }
             if(this->qSolverJob->get_solver() != NULL && this->qSolverJob->get_solver()->get_solver() != NULL){
                 std::string path = this->treeItem->getActionPath();
-                vector<vector<vector<float>>> current_strategy = this->qSolverJob->get_solver()->get_solver()->get_strategy(actionNode,deal_cards, path);
-                this->current_strategy = current_strategy;
+                ActionStrategy strategy_result = this->qSolverJob->get_solver()->get_solver()->get_strategy(actionNode,deal_cards, path);
+                this->current_strategy = strategy_result.strategy_per_hand;
+                this->current_actions = strategy_result.actions;
 
-                vector<vector<vector<float>>> current_evs = this->qSolverJob->get_solver()->get_solver()->get_evs(actionNode,deal_cards, path);
-                this->current_evs = current_evs;
+                ActionEVs evs_result = this->qSolverJob->get_solver()->get_solver()->get_evs(actionNode,deal_cards, path);
+                // Assuming EV actions are always the full set from the node for now.
+                this->current_evs = evs_result.evs_per_hand;
 
                 for(int i = 0;i < 52;i ++){
                     for(int j = 0;j < 52;j ++){
-                        const vector<float>& one_strategy = this->current_strategy[i][j];
+                        const vector<float>& one_strategy = this->current_strategy.at(i).at(j);
                         if(one_strategy.empty())continue;
                         Card card1 = this->cardint2card[i];
                         Card card2 = this->cardint2card[j];
@@ -250,10 +253,11 @@ void TableStrategyModel::updateStrategyData(){
                     }
 
                     std::string path = iter_tree_item->getActionPath();
-                    vector<vector<vector<float>>> current_strategy = this->qSolverJob->get_solver()->get_solver()->get_strategy(iterActionNode,deal_cards, path);
+                    ActionStrategy strategy_result = this->qSolverJob->get_solver()->get_solver()->get_strategy(iterActionNode,deal_cards, path);
+                    const auto& current_strategy = strategy_result.strategy_per_hand;
 
                     int child_chosen = -1;
-                    for(std::size_t i = 0;i < iterActionNode->getChildrens().size();i ++){
+                    for(std::size_t i = 0; i < iterActionNode->getChildrens().size(); i++){
                         if(iterActionNode->getChildrens()[i] == last_node){
                             child_chosen = i;
                             break;
@@ -262,12 +266,12 @@ void TableStrategyModel::updateStrategyData(){
                     if(child_chosen == -1)throw runtime_error("no child chosen");
                     for(std::size_t i = 0;i < 52;i ++){
                         for(std::size_t j = 0;j < 52;j ++){
-                            if(current_strategy[i][j].size() == 0)continue;
+                            if(current_strategy.at(i).at(j).empty()) continue;
                             if(iterActionNode->getPlayer() == 0){ // p1, IP
-                                this->p1_range[i][j] *= current_strategy[i][j][child_chosen];
+                                this->p1_range[i][j] *= current_strategy.at(i).at(j).at(child_chosen);
                             }
                             else if(iterActionNode->getPlayer() == 1){ // p2, OOP
-                                this->p2_range[i][j] *= current_strategy[i][j][child_chosen];
+                                this->p2_range[i][j] *= current_strategy.at(i).at(j).at(child_chosen);
                             }else throw runtime_error("player not exist in tablestrategymodel");
                         }
                     }
@@ -293,11 +297,10 @@ const vector<pair<GameActions,pair<float,float>>> TableStrategyModel::get_total_
 
     if(node->getType() == GameTreeNode::GameTreeNode::ACTION){
         shared_ptr<ActionNode> actionNode = dynamic_pointer_cast<ActionNode>(node);
-        vector<GameActions>& gameActions = actionNode->getActions();
         int current_player = actionNode->getPlayer();
 
-        vector<float> combos(gameActions.size(),0.0);
-        vector<float> avg_strategy(gameActions.size(),0.0);
+        vector<float> combos(this->current_actions.size(),0.0);
+        vector<float> avg_strategy(this->current_actions.size(),0.0);
         float sum_strategy = 0;
 
         for(std::size_t index1 = 0;index1 < this->current_strategy.size() ;index1 ++){
@@ -305,9 +308,9 @@ const vector<pair<GameActions,pair<float,float>>> TableStrategyModel::get_total_
                 const vector<float>& one_strategy = this->current_strategy[index1][index2];
                 if(one_strategy.empty())continue;
 
-                const vector<vector<float>>& range = current_player == 0? this->p1_range:this->p2_range;
-                if(range.size() <= index1 || range[index1].size() < index2) throw runtime_error(" index error when get range in tablestrategymodel");
-                const float one_range = range[index1][index2];
+                const auto& range = (current_player == 0) ? this->p1_range : this->p2_range;
+                if(range.size() <= index1 || range.at(index1).size() <= index2) throw runtime_error(" index error when get range in tablestrategymodel");
+                const float one_range = range.at(index1).at(index2);
 
                 for(std::size_t i = 0;i < one_strategy.size(); i ++ ){
                     float one_prob = one_strategy[i];
@@ -316,18 +319,20 @@ const vector<pair<GameActions,pair<float,float>>> TableStrategyModel::get_total_
                     sum_strategy += one_prob * one_range;
                 }
 
-                if(gameActions.size() != one_strategy.size()){
+                if(this->current_actions.size() != one_strategy.size()){
                     cout << "index: " << index1 << " " << index2 << endl;
-                    cout << "size not match between gameAction and stragegy: " << gameActions.size() << " " << one_strategy.size() << endl;
+                    cout << "size not match between gameAction and stragegy: " << this->current_actions.size() << " " << one_strategy.size() << endl;
                     throw runtime_error("size not match between gameAction and stragegy");
                 }
             }
         }
 
-        for(std::size_t i = 0;i < gameActions.size(); i ++ ){
-            avg_strategy[i] = avg_strategy[i] / sum_strategy;
+        for(std::size_t i = 0;i < this->current_actions.size(); i ++ ){
+            if (sum_strategy > 0) {
+                avg_strategy[i] = avg_strategy[i] / sum_strategy;
+            }
             pair<float,float> statics = pair<float,float>(combos[i],avg_strategy[i]);
-            pair<GameActions,pair<float,float>> one_ret = pair<GameActions,pair<float,float>>(gameActions[i],statics);
+            pair<GameActions,pair<float,float>> one_ret = pair<GameActions,pair<float,float>>(this->current_actions[i],statics);
             ret_strategy.push_back(one_ret);
         }
         return ret_strategy;
@@ -349,9 +354,7 @@ const vector<pair<GameActions,float>> TableStrategyModel::get_strategy(int i,int
     if(node->getType() == GameTreeNode::GameTreeNode::ACTION){
         shared_ptr<ActionNode> actionNode = dynamic_pointer_cast<ActionNode>(node);
 
-        vector<GameActions>& gameActions = actionNode->getActions();
-
-        vector<float> strategies;
+        vector<float> strategies(this->current_actions.size(), 0.0f);
 
         // get range data - initally copied from paint_range - could probably be integrated in loops below for efficiancy
         vector<pair<int,int>> card_cords;
@@ -376,18 +379,14 @@ const vector<pair<GameActions,float>> TableStrategyModel::get_strategy(int i,int
             return ret_strategy;
         // got range data
 
-        if(this->ui_strategy_table[i][j].size() > 0){
-            strategies = vector<float>(gameActions.size());
-            std::fill(strategies.begin(), strategies.end(), 0.);
-        }
         for(std::pair<int,int> index:this->ui_strategy_table[i][j]){
             int index1 = index.first;
             int index2 = index.second;
             const vector<float>& one_strategy = this->current_strategy[index1][index2];
-            if(gameActions.size() != one_strategy.size()){
+            if(this->current_actions.size() != one_strategy.size()){
                 cout << "index: " << index1 << " " << index2 << endl;
                 cout << "i,j: " << i << " " << j << endl;
-                cout << "size not match between gameAction and stragegy: " << gameActions.size() << " " << one_strategy.size() << endl;
+                cout << "size not match between gameAction and stragegy: " << this->current_actions.size() << " " << one_strategy.size() << endl;
                 throw runtime_error("size not match between gameAction and stragegy");
             }
 
@@ -398,7 +397,7 @@ const vector<pair<GameActions,float>> TableStrategyModel::get_strategy(int i,int
         }
 
         for(std::size_t indi = 0;indi < strategies.size();indi ++){
-            ret_strategy.push_back(std::pair<GameActions,float>(actionNode->getActions()[indi],
+            ret_strategy.push_back(std::pair<GameActions,float>(this->current_actions[indi],
                                                                 strategies[indi]));
         }
 
@@ -420,14 +419,6 @@ const vector<float> TableStrategyModel::get_ev_grid(int i,int j)const{
     if(node->getType() == GameTreeNode::GameTreeNode::ACTION){
         shared_ptr<ActionNode> actionNode = dynamic_pointer_cast<ActionNode>(node);
 
-        vector<GameActions>& gameActions = actionNode->getActions();
-
-//        vector<float> strategies;
-
-//        if(this->ui_strategy_table[i][j].size() > 0){
-//            strategies = vector<float>(gameActions.size());
-//            std::fill(strategies.begin(), strategies.end(), 0.);
-//        }
         for(std::pair<int,int> index:this->ui_strategy_table[i][j]){
             int index1 = index.first;
             int index2 = index.second;
@@ -435,10 +426,10 @@ const vector<float> TableStrategyModel::get_ev_grid(int i,int j)const{
             const vector<float>& one_ev = this->current_evs[index1][index2];
             if(one_ev.size() != one_strategy.size()) return vector<float>();
 
-            if(gameActions.size() != one_strategy.size()){
+            if(this->current_actions.size() != one_strategy.size()){
                 cout << "index: " << index1 << " " << index2 << endl;
                 cout << "i,j: " << i << " " << j << endl;
-                cout << "size not match between gameAction and stragegy: " << gameActions.size() << " " << one_strategy.size() << endl;
+                cout << "size not match between gameAction and stragegy: " << this->current_actions.size() << " " << one_strategy.size() << endl;
                 throw runtime_error("size not match between gameAction and stragegy");
             }
             float one_ev_float = 0;
@@ -469,13 +460,12 @@ const vector<float> TableStrategyModel::get_strategies_evs(int i,int j)const{
 
     if(node->getType() == GameTreeNode::GameTreeNode::ACTION){
         shared_ptr<ActionNode> actionNode = dynamic_pointer_cast<ActionNode>(node);
-        vector<GameActions>& gameActions = actionNode->getActions();
 
         vector<float> strategy_p;
-        if(this->ui_strategy_table[i][j].size() > 0){
-            ret_evs = vector<float>(gameActions.size());
+        if(!this->current_actions.empty() && this->ui_strategy_table[i][j].size() > 0){
+            ret_evs = vector<float>(this->current_actions.size());
             std::fill(ret_evs.begin(), ret_evs.end(), 0.);
-            strategy_p = vector<float>(gameActions.size());
+            strategy_p = vector<float>(this->current_actions.size());
             std::fill(strategy_p.begin(), strategy_p.end(), 0.);
         }
         float range = 0;
@@ -485,11 +475,11 @@ const vector<float> TableStrategyModel::get_strategies_evs(int i,int j)const{
             const vector<float>& one_strategy = this->current_strategy[index1][index2];
             const vector<float>& one_ev = this->current_evs[index1][index2];
             const float one_range = (*current_range)[index1][index2];
-            if(gameActions.size() != one_strategy.size() || one_ev.size() != one_strategy.size()){
+            if(this->current_actions.size() != one_strategy.size() || one_ev.size() != one_strategy.size()){
                 cout << "index: " << index1 << " " << index2 << endl;
                 cout << "i,j: " << i << " " << j << endl;
                 cout << "size not match between one_ev, gameAction and one_stragegy: "
-                     << one_ev.size() << " " << gameActions.size() << " " << one_strategy.size() << endl;
+                     << one_ev.size() << " " << this->current_actions.size() << " " << one_strategy.size() << endl;
                 throw runtime_error("size not match between one_ev, gameAction and one_stragegy");
             }
             for(std::size_t indi = 0;indi < ret_evs.size();indi ++){

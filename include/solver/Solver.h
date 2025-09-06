@@ -4,11 +4,24 @@
 
 #ifndef TEXASSOLVER_SOLVER_H
 #define TEXASSOLVER_SOLVER_H
-
-
 #include <include/GameTree.h>
 #include <optional>
 #include "solver_options.h" // For LockedNode
+
+// Forward-declare to avoid include cycle
+class GameActions;
+
+struct ActionStrategy {
+    std::vector<GameActions> actions;
+    // Strategy per hand: 52 x 52 x num_actions
+    std::vector<std::vector<std::vector<float>>> strategy_per_hand;
+};
+
+struct ActionEVs {
+    std::vector<GameActions> actions;
+    // EVs per hand: 52 x 52 x num_actions
+    std::vector<std::vector<std::vector<float>>> evs_per_hand;
+};
 
 class Solver {
 public:
@@ -38,8 +51,8 @@ public:
 
     virtual void stop() = 0;
     virtual json dumps(bool with_status,int depth) = 0;
-    virtual vector<vector<vector<float>>> get_strategy(shared_ptr<ActionNode> node,vector<Card> cards, const std::string& path) = 0;
-    virtual vector<vector<vector<float>>> get_evs(shared_ptr<ActionNode> node,vector<Card> cards, const std::string& path) = 0;
+    virtual ActionStrategy get_strategy(shared_ptr<ActionNode> node,vector<Card> cards, const std::string& path) = 0;
+    virtual ActionEVs get_evs(shared_ptr<ActionNode> node,vector<Card> cards, const std::string& path) = 0;
     shared_ptr<GameTree> tree;
 };
 

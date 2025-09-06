@@ -1,4 +1,5 @@
 #include "include/ui/treeitem.h"
+#include <QDebug>
 
 TreeItem::TreeItem(weak_ptr<GameTreeNode> data,TreeItem *parentItem) :
     m_parentItem(parentItem)
@@ -52,8 +53,20 @@ QString TreeItem::get_game_action_str(GameTreeNode::PokerActions action,float am
 
 QVariant TreeItem::data() const
 {
-    shared_ptr<GameTreeNode> parentNode = this->m_treedata.lock()->getParent();
     shared_ptr<GameTreeNode> currentNode = this->m_treedata.lock();
+    if (!currentNode) return "Expired Node";
+
+    shared_ptr<GameTreeNode> parentNode = currentNode->getParent();
+    // Defensive check for corrupted tree structure
+    if (m_parentItem && m_parentItem->m_treedata.lock() != parentNode) {
+        qWarning() << "TreeItem data inconsistency: UI parent does not match data parent.";
+        return "Data Error";
+    }
+    if (parentNode && parentNode == currentNode) {
+        qWarning() << "TreeItem data inconsistency: Node is its own parent (cycle detected).";
+        return "Cyclic Node Error";
+    }
+
     if(parentNode == nullptr){
         return TreeItem::get_round_str(currentNode->getRound()) + QObject::tr(" begin");
     }
@@ -84,34 +97,29 @@ QVariant TreeItem::data() const
 }
 
 std::string TreeItem::getActionPath() const {
-    // The model's rootItem is a dummy. Its parent is nullptr.
-    // The first real node's parent is this dummy root.
-    if (!m_parentItem || !m_parentItem->m_parentItem) {
-        return "";
-    }
+    // Iterative implementation to build the path from this item up to the root
+    std::string reversed_path;
+    const TreeItem* current_item = this;
 
-    std::string path_segment;
-    // We need to get the parent's GameTreeNode to find out which action led to this item.
-    shared_ptr<GameTreeNode> parentNode = m_parentItem->m_treedata.lock();
-    shared_ptr<GameTreeNode> currentNode = m_treedata.lock();
-
-    if (parentNode && parentNode->getType() == GameTreeNode::GameTreeNodeType::ACTION) {
-        shared_ptr<ActionNode> parentActionNode = dynamic_pointer_cast<ActionNode>(parentNode);
-        const auto& actions = parentActionNode->getActions();
-        const auto& childrens = parentActionNode->getChildrens();
-        for (size_t i = 0; i < childrens.size(); ++i) {
-            if (childrens[i] == currentNode) {
-                path_segment = actions[i].toString() + "/";
-                break;
+    while (current_item && current_item->m_parentItem) {
+        shared_ptr<GameTreeNode> parentNode = current_item->m_parentItem->m_treedata.lock();
+        shared_ptr<GameTreeNode> currentNode = current_item->m_treedata.lock();
+        if (parentNode && currentNode) {
+            if (parentNode->getType() == GameTreeNode::GameTreeNodeType::ACTION) {
+                shared_ptr<ActionNode> parentActionNode = dynamic_pointer_cast<ActionNode>(parentNode);
+                const auto& actions = parentActionNode->getActions();
+                const auto& childrens = parentActionNode->getChildrens();
+                for (size_t i = 0; i < childrens.size(); ++i) {
+                    if (childrens[i] == currentNode) {
+                        reversed_path = actions[i].toString() + "/" + reversed_path;
+                        break;
+                    }
+                }
             }
         }
+        current_item = current_item->m_parentItem;
     }
-    // CHANCE nodes are ignored in the path for locking purposes, so we just recurse.
-    else if (parentNode && parentNode->getType() == GameTreeNode::GameTreeNodeType::CHANCE) {
-        return m_parentItem->getActionPath();
-    }
-
-    return m_parentItem->getActionPath() + path_segment;
+    return reversed_path;
 }
 
 bool TreeItem::setParentItem(TreeItem *item)
