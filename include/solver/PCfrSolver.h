@@ -13,11 +13,13 @@
 #include <include/trainable/DiscountedCfrTrainable.h>
 #include "include/solver/Solver.h"
 #include <omp.h>
+#include "include/solver/solver_options.h"
 #include "include/tools/lookup8.h"
 #include "include/tools/utils.h"
 #include <queue>
 #include <optional>
-/*
+#include <unordered_map>
+/* 
 template<typename T>
 class ThreadsafeQueue {
     std::queue<T> queue_;
@@ -100,7 +102,7 @@ public:
     ActionEVs get_evs(shared_ptr<ActionNode> node, vector<Card> chance_cards, const std::string& path) override;
 private:
     // New members for analysis features
-    map<string, const LockedNode*> m_locked_nodes_map;
+    std::unordered_map<string, const LockedNode*> m_locked_nodes_map;
     std::optional<FullBoardSituation> m_full_board_situation;
 
     vector<vector<PrivateCards>> ranges;

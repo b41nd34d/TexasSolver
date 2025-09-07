@@ -169,7 +169,7 @@ vector<int> PCfrSolver::getAllAbstractionDeal(int deal){
         int origin_deal = int((deal - 1) / 4) * 4;
         for(int i = 0;i < 4;i ++){
             int one_card = origin_deal + i + 1;
-            
+
             const Card& first_card = this->deck.getCards()[origin_deal + i];
             uint64_t first_long = Card::boardInt2long(first_card.getCardInt());
             if (Card::boardsHasIntercept(first_long, this->initial_board_long))continue;
@@ -184,7 +184,7 @@ vector<int> PCfrSolver::getAllAbstractionDeal(int deal){
         for(int i = 0;i < 4;i ++) {
             for(int j = 0;j < 4;j ++) {
                 if(first_deal == second_deal && i == j) continue;
-                
+
                 const Card& first_card = this->deck.getCards()[first_deal + i];
                 uint64_t first_long = Card::boardInt2long(first_card.getCardInt());
                 if (Card::boardsHasIntercept(first_long, this->initial_board_long))continue;
@@ -264,7 +264,7 @@ PCfrSolver::chanceUtility(int player, shared_ptr<ChanceNode> node, const vector<
                 int i_card = card_base * 4 + i;
                 const Card& one_card = node->getCards()[i_card];
                 uint64_t card_long = Card::boardInt2long(one_card.getCardInt());
-                if (i == cardr) {                    
+                if (i == cardr) {
                     if (!Card::boardsHasIntercept(card_long, current_board)) {
                         multiplier_num += 1;
                     }
@@ -399,7 +399,7 @@ PCfrSolver::chanceUtility(int player, shared_ptr<ChanceNode> node, const vector<
             results[one_card.getNumberInDeckInt()] = child_utility;
         }
     }
-    
+
     if (m_full_board_situation.has_value()) {
         // When pruning, there's no isomorphism, and only one valid card.
         if (!valid_cards.empty()) {
