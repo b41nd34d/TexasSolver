@@ -15,6 +15,19 @@ PCfrSolver::~PCfrSolver(){
     //cout << "Pcfr destroyed" << endl;
 }
 
+bool PCfrSolver::AnalysisState::isNodeLocked(const std::string& path, int player) const {
+    auto it = locked_nodes_map.find(path);
+    return it != locked_nodes_map.end() && it->second->player_to_lock == player;
+}
+
+const Strategy* PCfrSolver::AnalysisState::getLockedStrategy(const std::string& path, int player) const {
+    auto it = locked_nodes_map.find(path);
+    if (it != locked_nodes_map.end() && it->second->player_to_lock == player) {
+        return &it->second->locked_strategy;
+    }
+    return nullptr;
+}
+
 PCfrSolver::PCfrSolver(shared_ptr<GameTree> tree, vector<PrivateCards> range1, vector<PrivateCards> range2,
                      vector<int> initial_board, shared_ptr<Compairer> compairer, Deck deck, int iteration_number, bool debug,
                      int print_interval, string logfile, string trainer, Solver::MonteCarolAlg monteCarolAlg,int warmup,float accuracy,bool use_isomorphism,int use_halffloats,int num_threads) :Solver(tree){
@@ -281,9 +294,9 @@ PCfrSolver::chanceUtility(int player, shared_ptr<ChanceNode> node, const vector<
     vector<int> valid_cards;
     valid_cards.reserve(node->getCards().size());
 
-    if (m_full_board_situation.has_value()) {
+    if (m_analysis.full_board.has_value()) {
         // Full board analysis: only "deal" the specific card for this street.
-        const auto& full_board_cards = m_full_board_situation->board_cards;
+        const auto& full_board_cards = m_analysis.full_board->board_cards;
         vector<int> current_board_vec = Card::long2board(current_board);
         size_t num_cards_on_board = current_board_vec.size();
         int card_to_deal_int = -1;
@@ -400,7 +413,7 @@ PCfrSolver::chanceUtility(int player, shared_ptr<ChanceNode> node, const vector<
         }
     }
 
-    if (m_full_board_situation.has_value()) {
+    if (m_analysis.full_board.has_value()) {
         // When pruning, there's no isomorphism, and only one valid card.
         if (!valid_cards.empty()) {
             int card_idx = valid_cards[0];
@@ -470,13 +483,13 @@ PCfrSolver::actionUtility(int player, shared_ptr<ActionNode> node, const vector<
     bool is_locked = false;
     int node_player = node->getPlayer();
 
-    auto it = m_locked_nodes_map.find(path);
-    if (it != m_locked_nodes_map.end() && it->second->player_to_lock == node_player) {
+    const Strategy* locked_strategy_ptr = m_analysis.getLockedStrategy(path, node_player);
+    if (locked_strategy_ptr) {
         is_locked = true;
         if (iter == 0) { // Log only on the first iteration to avoid spam
             qDebug().noquote() << "Applying locked strategy at path:" << QString::fromStdString(path);
         }
-        const Strategy& locked_strategy = it->second->locked_strategy;
+        const Strategy& locked_strategy = *locked_strategy_ptr;
         current_strategy.assign(actions.size() * node_player_private_cards.size(), 0.0f);
 
         for (size_t action_id = 0; action_id < actions.size(); ++action_id) {
@@ -619,15 +632,10 @@ PCfrSolver::actionUtility(int player, shared_ptr<ActionNode> node, const vector<
         if(!this->distributing_task && !this->collecting_statics && !is_locked) {
             if (iter > this->warmup) {
                 trainable->updateRegrets(regrets, iter + 1, reach_probs);
-            }/*else if(iter < this->warmup){
-            vector<int> deals = this->getAllAbstractionDeal(deal);
-            shared_ptr<Trainable> one_trainable = node->getTrainable(deals[0]);
-            one_trainable->updateRegrets(regrets, iter + 1, reach_probs[player]);
-            }*/
-            else {
+            } else {
                 // iter == this->warmup
                 vector<int> deals;
-                if (m_full_board_situation.has_value()) {
+                if (m_analysis.full_board.has_value()) {
                     deals.push_back(deal);
                 } else {
                     deals = this->getAllAbstractionDeal(deal);
@@ -869,27 +877,25 @@ void PCfrSolver::stop() {
 }
 
 void PCfrSolver::train(const vector<LockedNode>& locked_nodes, const std::optional<FullBoardSituation>& full_board) {
-    this->m_locked_nodes_map.clear();
-    if (full_board.has_value()) {
-        qDebug() << "PCfrSolver::train received full_board_situation.";
-    } else {
-        qDebug() << "PCfrSolver::train did NOT receive full_board_situation.";
-    }
-    if (!locked_nodes.empty()) {
-        qDebug().noquote() << "Node locking enabled for" << locked_nodes.size() << "rules.";
-        for (const auto& locked_node : locked_nodes) {
-            this->m_locked_nodes_map[locked_node.node_path] = &locked_node;
-            qDebug().noquote() << "  - Locking node path:" << QString::fromStdString(locked_node.node_path) << "for player" << locked_node.player_to_lock;
-        }
-    }
-    this->m_full_board_situation = full_board;
-    if (m_full_board_situation.has_value()) {
-        qDebug().noquote() << "Full board analysis enabled.";
-        if (this->warmup > 0) {
-            qDebug().noquote() << "  - Isomorphic deal expansion will be disabled during warmup iterations.";
-        }
-    }
+    // Reset and configure analysis state
+    m_analysis = AnalysisState();
+    m_analysis.enabled = !locked_nodes.empty() || full_board.has_value();
 
+    if (m_analysis.enabled) {
+        if (full_board.has_value()) {
+            qDebug() << "PCfrSolver::train received full_board_situation. Full board analysis enabled.";
+            m_analysis.full_board = full_board;
+        }
+        if (!locked_nodes.empty()) {
+            qDebug().noquote() << "Node locking enabled for" << locked_nodes.size() << "rules.";
+            for (const auto& locked_node : locked_nodes) {
+                m_analysis.locked_nodes_map[locked_node.node_path] = &locked_node;
+                qDebug().noquote() << "  - Locking node path:" << QString::fromStdString(locked_node.node_path) << "for player" << locked_node.player_to_lock;
+            }
+        }
+    } else {
+        qDebug() << "Analysis mode disabled.";
+    }
     vector<vector<PrivateCards>> player_privates(this->player_number);
     player_privates[0] = pcm.getPreflopCards(0);
     player_privates[1] = pcm.getPreflopCards(1);
@@ -1137,10 +1143,9 @@ ActionStrategy PCfrSolver::get_strategy(shared_ptr<ActionNode> node,vector<Card>
     result.strategy_per_hand.assign(52, vector<vector<float>>(52, vector<float>(result.actions.size(), 0.0f)));
 
     // Check for locked node first, and return the fixed strategy if found.
-    auto it = m_locked_nodes_map.find(path);
-    if (it != m_locked_nodes_map.end() && it->second->player_to_lock == node->getPlayer()) {
-        result.strategy_per_hand.assign(52, vector<vector<float>>(52, vector<float>(result.actions.size(), 0.0f)));
-        const Strategy& locked_strategy = it->second->locked_strategy;
+    const Strategy* locked_strategy_ptr = m_analysis.getLockedStrategy(path, node->getPlayer());
+    if (locked_strategy_ptr) {
+        const Strategy& locked_strategy = *locked_strategy_ptr;
 
         for (const auto& private_card : ranges[node->getPlayer()]) {
             vector<float> hand_strategy(result.actions.size(), 0.0f); // Sized to full action list, init to 0

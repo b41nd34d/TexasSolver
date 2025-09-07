@@ -127,55 +127,59 @@ void TreeModel::populate(const QModelIndex &index)
     if (!node) return;
 
     const auto& locked_nodes = this->qSolverJob->locked_nodes;
-    bool is_view_locked = !locked_nodes.empty();
+    const auto& full_board_situation = this->qSolverJob->full_board_situation;
+    bool analysis_mode = full_board_situation.has_value() || !locked_nodes.empty();
 
     if (node->getType() == GameTreeNode::GameTreeNodeType::ACTION) {
         shared_ptr<ActionNode> actionNode = dynamic_pointer_cast<ActionNode>(node);
         string path = item->getActionPath();
         const auto& actions = actionNode->getActions();
         const auto& childrens = actionNode->getChildrens();
-        std::vector<shared_ptr<GameTreeNode>> children_to_add;
+        std::vector<shared_ptr<GameTreeNode>> children_to_add = childrens;
 
-        if (!is_view_locked) {
-            // Normal mode: add all children
-            children_to_add = childrens;
-        } else {
-            // Locked mode: filter children based on rules
-            const LockedNode* lock_rule = nullptr;
-            for(const auto& rule : locked_nodes) {
-                if (rule.node_path == path && rule.player_to_lock == actionNode->getPlayer()) {
-                    lock_rule = &rule;
-                    break;
+        if (analysis_mode) {
+            children_to_add.clear();
+            if (!locked_nodes.empty()) {
+                // Locked mode: filter children based on rules
+                const LockedNode* lock_rule = nullptr;
+                for(const auto& rule : locked_nodes) {
+                    if (rule.node_path == path && rule.player_to_lock == actionNode->getPlayer()) {
+                        lock_rule = &rule;
+                        break;
+                    }
                 }
-            }
 
-            for (size_t i = 0; i < actions.size(); ++i) {
-                bool add_child = false;
-                if (lock_rule) {
-                    // A rule exists for this specific node, only add actions in the rule
-                    Action action_key;
-                    switch(actions[i].getAction()) {
-                        case GameTreeNode::PokerActions::FOLD: action_key = -1; break;
-                        case GameTreeNode::PokerActions::CHECK: case GameTreeNode::PokerActions::CALL: action_key = 0; break;
-                        case GameTreeNode::PokerActions::BET: case GameTreeNode::PokerActions::RAISE: action_key = static_cast<Action>(actions[i].getAmount()); break;
-                        default: continue;
-                    }
-                    if (lock_rule->locked_strategy.count(action_key)) {
-                        add_child = true;
-                    }
-                } else {
-                    // No rule for this node, check if it's on a path to a future locked node
-                    string child_path = path + actions[i].toString() + "/";
-                    for (const auto& rule : locked_nodes) {
-                        if (rule.node_path.rfind(child_path, 0) == 0) {
+                for (size_t i = 0; i < actions.size(); ++i) {
+                    bool add_child = false;
+                    if (lock_rule) {
+                        // A rule exists for this specific node, only add actions in the rule
+                        Action action_key;
+                        switch(actions[i].getAction()) {
+                            case GameTreeNode::PokerActions::FOLD: action_key = -1; break;
+                            case GameTreeNode::PokerActions::CHECK: case GameTreeNode::PokerActions::CALL: action_key = 0; break;
+                            case GameTreeNode::PokerActions::BET: case GameTreeNode::PokerActions::RAISE: action_key = static_cast<Action>(actions[i].getAmount()); break;
+                            default: continue;
+                        }
+                        if (lock_rule->locked_strategy.count(action_key)) {
                             add_child = true;
-                            break;
+                        }
+                    } else {
+                        // No rule for this node, check if it's on a path to a future locked node
+                        string child_path = path + actions[i].toString() + "/";
+                        for (const auto& rule : locked_nodes) {
+                            if (rule.node_path.rfind(child_path, 0) == 0) {
+                                add_child = true;
+                                break;
+                            }
                         }
                     }
+                    if (add_child) {
+                        children_to_add.push_back(childrens[i]);
+                    }
                 }
-                if (add_child) {
-                    children_to_add.push_back(childrens[i]);
-                }
+            } else if (full_board_situation.has_value()) {
+                // Full board analysis without locks, show the whole tree
+                children_to_add = childrens;
             }
         }
 

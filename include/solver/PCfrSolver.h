@@ -101,9 +101,15 @@ public:
     ActionStrategy get_strategy(shared_ptr<ActionNode> node, vector<Card> chance_cards, const std::string& path) override;
     ActionEVs get_evs(shared_ptr<ActionNode> node, vector<Card> chance_cards, const std::string& path) override;
 private:
-    // New members for analysis features
-    std::unordered_map<string, const LockedNode*> m_locked_nodes_map;
-    std::optional<FullBoardSituation> m_full_board_situation;
+    struct AnalysisState {
+        bool enabled = false;
+        std::unordered_map<std::string, const LockedNode*> locked_nodes_map;
+        std::optional<FullBoardSituation> full_board;
+
+        bool isNodeLocked(const std::string& path, int player) const;
+        const Strategy* getLockedStrategy(const std::string& path, int player) const;
+    };
+    AnalysisState m_analysis;
 
     vector<vector<PrivateCards>> ranges;
     vector<PrivateCards> range1;
