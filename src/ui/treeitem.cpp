@@ -52,8 +52,13 @@ QString TreeItem::get_game_action_str(GameTreeNode::PokerActions action,float am
 
 QVariant TreeItem::data() const
 {
-    shared_ptr<GameTreeNode> parentNode = this->m_treedata.lock()->getParent();
     shared_ptr<GameTreeNode> currentNode = this->m_treedata.lock();
+    if (!currentNode) {
+        return "Invalid Node";
+    }
+
+    shared_ptr<GameTreeNode> parentNode = currentNode->getParent();
+
     if(parentNode == nullptr){
         return TreeItem::get_round_str(currentNode->getRound()) + QObject::tr(" begin");
     }
@@ -63,7 +68,6 @@ QVariant TreeItem::data() const
         vector<shared_ptr<GameTreeNode>>& childrens = parentActionNode->getChildrens();
         for(std::size_t i = 0;i < childrens.size();i ++){
             if(childrens[i] == currentNode){
-                float amount = childrens[i]->getPot() - parentNode->getPot();
                 return (parentActionNode->getPlayer() == 0 ? QObject::tr("IP "):QObject::tr("OOP ")) + \
                        TreeItem::get_game_action_str(actions[i].getAction(),actions[i].getAmount());
             }

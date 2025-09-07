@@ -5,11 +5,8 @@
 #include <QRect>
 #include <QBrush>
 
-RoughStrategyItemDelegate::RoughStrategyItemDelegate(DetailWindowSetting* detailWindowSetting,QObject *parent) :
-    WordItemDelegate(parent)
-{
-    this->detailWindowSetting = detailWindowSetting;
-}
+RoughStrategyItemDelegate::RoughStrategyItemDelegate(QObject *parent) :
+    WordItemDelegate(parent) {}
 
 void RoughStrategyItemDelegate::paint_strategy(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const {
     auto options = option;
@@ -18,9 +15,10 @@ void RoughStrategyItemDelegate::paint_strategy(QPainter *painter, const QStyleOp
     const RoughStrategyViewerModel * roughStrategyViewerModel = qobject_cast<const RoughStrategyViewerModel*>(index.model());
 
     options.text = "";
-    if(roughStrategyViewerModel->tableStrategyModel->treeItem != NULL &&
-            roughStrategyViewerModel->tableStrategyModel->treeItem->m_treedata.lock()->getType() == GameTreeNode::GameTreeNode::ACTION){
-        shared_ptr<GameTreeNode> node = roughStrategyViewerModel->tableStrategyModel->treeItem->m_treedata.lock();
+    if (!roughStrategyViewerModel || !roughStrategyViewerModel->tableStrategyModel) return;
+
+    shared_ptr<GameTreeNode> node = roughStrategyViewerModel->tableStrategyModel->getCurrentNode().lock();
+    if(node && node->getType() == GameTreeNode::GameTreeNode::ACTION){
         if(index.column() >= roughStrategyViewerModel->tableStrategyModel->total_strategy.size()) return;
 
         pair<GameActions,pair<float,float>> one_strategy = roughStrategyViewerModel->tableStrategyModel->total_strategy[index.column()];

@@ -100,6 +100,8 @@ public:
     json dumps(bool with_status,int depth) override;
     vector<vector<vector<float>>> get_strategy(shared_ptr<ActionNode> node,vector<Card> chance_cards) override;
     vector<vector<vector<float>>> get_evs(shared_ptr<ActionNode> node,vector<Card> chance_cards) override;
+    vector<Card> get_initial_board_cards() override { return this->initial_board_cards; }
+    vector<Card> get_full_board_cards() override { return this->full_board_cards; }
 
     const vector<Card>& get_full_board_cards() const { return full_board_cards; }
 private:
@@ -107,6 +109,7 @@ private:
     vector<PrivateCards> range1;
     vector<PrivateCards> range2;
     vector<int> initial_board;
+    vector<Card> initial_board_cards;
     uint64_t initial_board_long;
     shared_ptr<Compairer> compairer;
     int color_iso_offset[52 * 52 * 2][4] = {0};

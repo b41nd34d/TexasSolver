@@ -14,16 +14,13 @@
 #include "include/ui/tablestrategymodel.h"
 #include "include/ui/detailwindowsetting.h"
 #include "include/library.h"
+#include "worditemdelegate.h"
 
 class StrategyItemDelegate: public WordItemDelegate{
     Q_OBJECT
 
 public:
-    explicit StrategyItemDelegate(QSolverJob * qSolverJob,DetailWindowSetting* detailWindowSetting,QObject *parent = 0);
-
-private:
-    QSolverJob * qSolverJob = NULL;
-    DetailWindowSetting* detailWindowSetting = NULL;
+    explicit StrategyItemDelegate(QObject *parent = nullptr);
 
 protected:
     void paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const;

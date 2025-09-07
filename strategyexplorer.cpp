@@ -55,19 +55,38 @@ StrategyExplorer::StrategyExplorer(QWidget *parent,QSolverJob * qSolverJob) :
     // Initize Detail Viewer window
     this->detailViewerModel = new DetailViewerModel(this->tableStrategyModel,this);
     this->ui->detailView->setModel(this->detailViewerModel);
-    this->detailItemItemDelegate = new DetailItemDelegate(&(this->detailWindowSetting),this);
+    this->detailItemItemDelegate = new DetailItemDelegate(this);
     this->ui->detailView->setItemDelegate(this->detailItemItemDelegate);
 
     // Initize Rough Strategy Viewer
     this->roughStrategyViewerModel = new RoughStrategyViewerModel(this->tableStrategyModel,this);
     this->ui->roughStrategyView->setModel(this->roughStrategyViewerModel);
-    this->roughStrategyItemDelegate = new RoughStrategyItemDelegate(&(this->detailWindowSetting),this);
+    this->roughStrategyItemDelegate = new RoughStrategyItemDelegate(this);
     this->ui->roughStrategyView->setItemDelegate(this->roughStrategyItemDelegate);
+
+    // Programmatically select the root node to ensure the view is populated on startup.
+    QAbstractItemModel* treeModel = this->ui->gameTreeView->model();
+    if (treeModel && treeModel->rowCount() > 0) {
+        QModelIndex rootIndex = treeModel->index(0, 0, QModelIndex());
+        if (rootIndex.isValid()) {
+            // Set the current selection in the tree view
+            this->ui->gameTreeView->setCurrentIndex(rootIndex);
+            // Manually call the click handler to load the data for the root node
+            item_clicked(rootIndex);
+        }
+    }
 }
 
 StrategyExplorer::~StrategyExplorer()
 {
     delete ui;
+    delete this->delegate_strategy;
+    delete this->tableStrategyModel;
+    delete this->detailViewerModel;
+    delete this->detailItemItemDelegate;
+    delete this->roughStrategyViewerModel;
+    delete this->roughStrategyItemDelegate;
+    delete this->timer;
 }
 
 void StrategyExplorer::initializeView() {
@@ -77,6 +96,8 @@ void StrategyExplorer::initializeView() {
     this->cards.clear();
 
     if (qSolverJob->analysis_mode == QSolverJob::AnalysisMode::HAND_ANALYSIS) {
+        // In hand analysis mode, lock the turn and river cards to the specific hand.
+        vector<Card> full_board_cards = qSolverJob->get_solver()->get_solver()->get_full_board_cards();
         // In hand analysis mode, we must get the card objects directly from the solver
         // to ensure they are fully initialized with their correct deck index.
         // Creating them from a string here would result in "detached" cards that
@@ -87,6 +108,8 @@ void StrategyExplorer::initializeView() {
             return;
         }
 
+        if (full_board_cards.size() >= 4) {
+            Card turn_card = full_board_cards[3];
         // This uses the new public getter added to PCfrSolver.h
         const vector<Card>& solver_board_cards = solver->get_full_board_cards();
 
@@ -98,6 +121,8 @@ void StrategyExplorer::initializeView() {
             ui->turnCardBox->setEnabled(false);
             this->tableStrategyModel->setTrunCard(turn_card);
         }
+        if (full_board_cards.size() == 5) {
+            Card river_card = full_board_cards[4];
         if (solver_board_cards.size() == 5) {
             const Card& river_card = solver_board_cards[4];
             this->cards.push_back(river_card); // Store a copy for local use
@@ -186,8 +211,13 @@ void StrategyExplorer::process_board(const TreeItem* treeitem){
     if(treeitem != nullptr){
         if(treeitem->m_treedata.lock()->getRound() == GameTreeNode::GameRound::TURN && !this->tableStrategyModel->getTrunCard().empty()){
             local_cards.push_back(this->tableStrategyModel->getTrunCard());
+void StrategyExplorer::process_board(shared_ptr<GameTreeNode> node){
+    vector<Card> local_cards = this->qSolverJob->get_solver()->get_solver()->get_initial_board_cards();
+    if(node){
+        if(node->getRound() == GameTreeNode::GameRound::TURN && !this->tableStrategyModel->getTrunCard().empty()){
+            local_cards.push_back(this->tableStrategyModel->getTrunCard());
         }
-        else if(treeitem->m_treedata.lock()->getRound() == GameTreeNode::GameRound::RIVER){
+        else if(node->getRound() == GameTreeNode::GameRound::RIVER){
             if(!this->tableStrategyModel->getTrunCard().empty())
                 local_cards.push_back(this->tableStrategyModel->getTrunCard());
             if(!this->tableStrategyModel->getRiverCard().empty())
@@ -221,9 +251,13 @@ void StrategyExplorer::process_treeclick(const TreeItem* treeitem){
 void StrategyExplorer::item_clicked(const QModelIndex& index){
     try{
         TreeItem * treeNode = static_cast<TreeItem*>(index.internalPointer());
+        if (!treeNode) return;
+        shared_ptr<GameTreeNode> gameNode = treeNode->m_treedata.lock();
+        if (!gameNode) return;
+
         this->process_treeclick(treeNode);
-        this->process_board(treeNode);
-        this->tableStrategyModel->setGameTreeNode(treeNode);
+        this->process_board(gameNode);
+        this->tableStrategyModel->setGameTreeNode(treeNode->m_treedata);
         this->tableStrategyModel->updateStrategyData();
         this->ui->strategyTableView->viewport()->update();
         this->roughStrategyViewerModel->onchanged();
@@ -254,7 +288,7 @@ void StrategyExplorer::on_turnCardBox_currentIndexChanged(int index)
         // TODO this somehow cause bugs, crashes, why?
         //this->roughStrategyViewerModel->onchanged();
         //this->ui->roughStrategyView->viewport()->update();
-        this->process_board(this->tableStrategyModel->treeItem);
+        this->process_board(this->tableStrategyModel->getCurrentNode().lock());
     }
     this->ui->strategyTableView->viewport()->update();
     this->ui->detailView->viewport()->update();
@@ -273,7 +307,7 @@ void StrategyExplorer::on_riverCardBox_currentIndexChanged(int index)
         this->tableStrategyModel->updateStrategyData();
         //this->roughStrategyViewerModel->onchanged();
         //this->ui->roughStrategyView->viewport()->update();
-        this->process_board(this->tableStrategyModel->treeItem);
+        this->process_board(this->tableStrategyModel->getCurrentNode().lock());
     }
     this->ui->strategyTableView->viewport()->update();
     this->ui->detailView->viewport()->update();

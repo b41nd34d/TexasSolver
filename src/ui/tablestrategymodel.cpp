@@ -72,21 +72,21 @@ int TableStrategyModel::columnCount(const QModelIndex &parent) const
     return 13;
 }
 
-void TableStrategyModel::setGameTreeNode(TreeItem *item) {
-    this->treeItem = item;
+void TableStrategyModel::setGameTreeNode(const weak_ptr<GameTreeNode>& node) {
+    this->currentNode = node;
 }
 
 void TableStrategyModel::updateStrategyData() {
     beginResetModel();
     total_strategy.clear();
-    if (!treeItem || !treeItem->m_treedata.lock()) {
+    shared_ptr<GameTreeNode> node = currentNode.lock();
+    if (!node) {
         current_strategy.clear();
         current_evs.clear();
         endResetModel();
         return;
     }
 
-    shared_ptr<GameTreeNode> node = treeItem->m_treedata.lock();
     if (node->getType() != GameTreeNode::ACTION) {
         current_strategy.clear();
         current_evs.clear();
@@ -106,11 +106,16 @@ void TableStrategyModel::updateStrategyData() {
     }
 
     vector<Card> chance_cards;
-    if (!turnCard.empty()) {
-        chance_cards.push_back(turnCard);
-    }
-    if (!riverCard.empty()) {
-        chance_cards.push_back(riverCard);
+    GameTreeNode::GameRound round = actionNode->getRound();
+
+    if (round == GameTreeNode::GameRound::TURN) {
+        if (!turnCard.empty()) {
+            chance_cards.push_back(turnCard);
+        }
+    } else if (round == GameTreeNode::GameRound::RIVER) {
+        if (!riverCard.empty()) {
+            chance_cards.push_back(riverCard);
+        }
     }
 
     current_strategy = solver->get_strategy(actionNode, chance_cards);
@@ -169,7 +174,14 @@ void TableStrategyModel::updateStrategyData() {
     for (const auto& pc : range) {
         if (pc.card1 >= 52 || pc.card2 >= 52 || pc.card1 < 0 || pc.card2 < 0) continue;
 
-        if (strat_data[pc.card1].empty() || strat_data[pc.card1][pc.card2].empty() || ev_data[pc.card1].empty() || ev_data[pc.card1][pc.card2].empty()) continue;
+        if (static_cast<size_t>(pc.card1) >= strat_data.size() ||
+            static_cast<size_t>(pc.card2) >= strat_data[pc.card1].size() ||
+            strat_data[pc.card1][pc.card2].empty() ||
+            static_cast<size_t>(pc.card1) >= ev_data.size() ||
+            static_cast<size_t>(pc.card2) >= ev_data[pc.card1].size() ||
+            ev_data[pc.card1][pc.card2].empty()) {
+            continue;
+        }
         const auto& hand_strat = strat_data[pc.card1][pc.card2];
         const auto& hand_ev = ev_data[pc.card1][pc.card2];
         if (hand_strat.size() != actions.size() || hand_ev.size() != actions.size()) continue;
@@ -269,17 +281,13 @@ void TableStrategyModel::setRiverCard(const Card &card) { this->riverCard = card
 Card TableStrategyModel::getTrunCard() const { return this->turnCard; }
 Card TableStrategyModel::getRiverCard() const { return this->riverCard; }
 
-QSolverJob *TableStrategyModel::get_qsolverjob() const {
-    return qSolverJob;
-}
-
 vector<pair<GameActions, float>> TableStrategyModel::get_strategy(int i, int j) const {
     vector<pair<GameActions, float>> avg_strategy;
-    if (i < 0 || i >= 13 || j < 0 || j >= 13 || !treeItem || !treeItem->m_treedata.lock()) {
+    shared_ptr<GameTreeNode> node = currentNode.lock();
+    if (i < 0 || i >= 13 || j < 0 || j >= 13 || !node) {
         return avg_strategy;
     }
 
-    shared_ptr<GameTreeNode> node = treeItem->m_treedata.lock();
     if (node->getType() != GameTreeNode::ACTION) {
         return avg_strategy;
     }
@@ -320,11 +328,11 @@ vector<pair<GameActions, float>> TableStrategyModel::get_strategy(int i, int j) 
 
 vector<float> TableStrategyModel::get_strategies_evs(int i, int j) const {
     vector<float> avg_evs;
-    if (i < 0 || i >= 13 || j < 0 || j >= 13 || !treeItem || !treeItem->m_treedata.lock()) {
+    shared_ptr<GameTreeNode> node = currentNode.lock();
+    if (i < 0 || i >= 13 || j < 0 || j >= 13 || !node) {
         return avg_evs;
     }
 
-    shared_ptr<GameTreeNode> node = treeItem->m_treedata.lock();
     if (node->getType() != GameTreeNode::ACTION) {
         return avg_evs;
     }

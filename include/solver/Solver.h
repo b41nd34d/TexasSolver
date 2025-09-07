@@ -26,6 +26,8 @@ public:
     virtual json dumps(bool with_status,int depth) = 0;
     virtual vector<vector<vector<float>>> get_strategy(shared_ptr<ActionNode> node,vector<Card> cards) = 0;
     virtual vector<vector<vector<float>>> get_evs(shared_ptr<ActionNode> node,vector<Card> cards) = 0;
+    virtual vector<Card> get_initial_board_cards() { return {}; }
+    virtual vector<Card> get_full_board_cards() { return {}; }
     shared_ptr<GameTree> tree;
 };
 

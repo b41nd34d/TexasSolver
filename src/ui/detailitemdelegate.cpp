@@ -5,32 +5,31 @@
 #include <QRect>
 #include <QBrush>
 
-DetailItemDelegate::DetailItemDelegate(DetailWindowSetting* detailWindowSetting,QObject *parent) :
-    WordItemDelegate(parent)
-{
-    this->detailWindowSetting = detailWindowSetting;
-}
+DetailItemDelegate::DetailItemDelegate(QObject *parent) :
+    WordItemDelegate(parent) {}
 
 void DetailItemDelegate::paint_strategy(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const {
     auto options = option;
     initStyleOption(&options, index);
 
     const DetailViewerModel * detailViewerModel = qobject_cast<const DetailViewerModel*>(index.model());
-    //vector<pair<GameActions,float>> strategy = detailViewerModel->tableStrategyModel->get_strategy(this->detailWindowSetting->grid_i,this->detailWindowSetting->grid_j);
 
-    options.text = "";
-    if(detailViewerModel->tableStrategyModel->treeItem != NULL &&
-            detailViewerModel->tableStrategyModel->treeItem->m_treedata.lock()->getType() == GameTreeNode::GameTreeNode::ACTION){
-        shared_ptr<GameTreeNode> node = detailViewerModel->tableStrategyModel->treeItem->m_treedata.lock();
+    options.text = "";    
+    if (!detailViewerModel || !detailViewerModel->tableStrategyModel) return;
+
+    shared_ptr<GameTreeNode> node = detailViewerModel->tableStrategyModel->getCurrentNode().lock();
+    if(node && node->getType() == GameTreeNode::GameTreeNode::ACTION){
+        const DetailWindowSetting* dws = detailViewerModel->tableStrategyModel->get_detail_window_setting();
+        if (!dws) return;
         int strategy_number = 0;
-        if(this->detailWindowSetting->grid_i >= 0 && this->detailWindowSetting->grid_j >= 0 && !detailViewerModel->tableStrategyModel->ui_strategy_table.empty()){
-           strategy_number = detailViewerModel->tableStrategyModel->ui_strategy_table[this->detailWindowSetting->grid_i][this->detailWindowSetting->grid_j].size();
+        if(dws->grid_i >= 0 && dws->grid_j >= 0 && !detailViewerModel->tableStrategyModel->ui_strategy_table.empty()){
+           strategy_number = detailViewerModel->tableStrategyModel->ui_strategy_table[dws->grid_i][dws->grid_j].size();
         }
         int ind = index.row() * detailViewerModel->columns + index.column();
 
         if(ind < strategy_number){
 
-            pair<int,int> strategy_ui_table = detailViewerModel->tableStrategyModel->ui_strategy_table[this->detailWindowSetting->grid_i][this->detailWindowSetting->grid_j][ind];
+            pair<int,int> strategy_ui_table = detailViewerModel->tableStrategyModel->ui_strategy_table[dws->grid_i][dws->grid_j][ind];
             int card1 = strategy_ui_table.first;
             int card2 = strategy_ui_table.second;
             vector<float> strategy = detailViewerModel->tableStrategyModel->current_strategy[card1][card2];
@@ -155,22 +154,25 @@ void DetailItemDelegate::paint_range(QPainter *painter, const QStyleOptionViewIt
     initStyleOption(&options, index);
 
     const DetailViewerModel * detailViewerModel = qobject_cast<const DetailViewerModel*>(index.model());
-    //vector<pair<GameActions,float>> strategy = detailViewerModel->tableStrategyModel->get_strategy(this->detailWindowSetting->grid_i,this->detailWindowSetting->grid_j);
     options.text = "";
 
-    if(detailViewerModel->tableStrategyModel->treeItem != NULL){
+    if(detailViewerModel && detailViewerModel->tableStrategyModel && detailViewerModel->tableStrategyModel->getCurrentNode().lock()){
+        const DetailWindowSetting* dws = detailViewerModel->tableStrategyModel->get_detail_window_setting();
+        if (!dws) return;
+
         vector<pair<int,int>> card_cords;
-        if(this->detailWindowSetting->mode == DetailWindowSetting::DetailWindowMode::RANGE_IP){
-            card_cords = detailViewerModel->tableStrategyModel->ui_p1_range[this->detailWindowSetting->grid_i][this->detailWindowSetting->grid_j];
+        if(dws->mode == DetailWindowSetting::DetailWindowMode::RANGE_IP){
+            card_cords = detailViewerModel->tableStrategyModel->ui_p1_range[dws->grid_i][dws->grid_j];
         }else{
-            card_cords = detailViewerModel->tableStrategyModel->ui_p2_range[this->detailWindowSetting->grid_i][this->detailWindowSetting->grid_j];
+            card_cords = detailViewerModel->tableStrategyModel->ui_p2_range[dws->grid_i][dws->grid_j];
         }
 
         size_t ind = static_cast<size_t>(index.row() * detailViewerModel->columns + index.column());
         if(ind < card_cords.size()){
             pair<int,int> cord = card_cords[ind];
             float range_number;
-            if(this->detailWindowSetting->mode == DetailWindowSetting::DetailWindowMode::RANGE_IP){
+
+            if(dws->mode == DetailWindowSetting::DetailWindowMode::RANGE_IP){
                 range_number = detailViewerModel->tableStrategyModel->p1_range[cord.first][cord.second];
             }else{
                 range_number = detailViewerModel->tableStrategyModel->p2_range[cord.first][cord.second];
@@ -212,18 +214,21 @@ void DetailItemDelegate::paint_evs(QPainter *painter, const QStyleOptionViewItem
     const DetailViewerModel * detailViewerModel = qobject_cast<const DetailViewerModel*>(index.model());
 
     options.text = "";
-    if(detailViewerModel->tableStrategyModel->treeItem != NULL &&
-            detailViewerModel->tableStrategyModel->treeItem->m_treedata.lock()->getType() == GameTreeNode::GameTreeNode::ACTION){
-        shared_ptr<GameTreeNode> node = detailViewerModel->tableStrategyModel->treeItem->m_treedata.lock();
+    if (!detailViewerModel || !detailViewerModel->tableStrategyModel) return;
+
+    shared_ptr<GameTreeNode> node = detailViewerModel->tableStrategyModel->getCurrentNode().lock();
+    if(node && node->getType() == GameTreeNode::GameTreeNode::ACTION){
         int strategy_number = 0;
-        if(this->detailWindowSetting->grid_i >= 0 && this->detailWindowSetting->grid_j >= 0){
-           strategy_number = static_cast<int>(detailViewerModel->tableStrategyModel->ui_strategy_table[this->detailWindowSetting->grid_i][this->detailWindowSetting->grid_j].size());
+        const DetailWindowSetting* dws = detailViewerModel->tableStrategyModel->get_detail_window_setting();
+        if (!dws) return;
+        if(dws->grid_i >= 0 && dws->grid_j >= 0){
+           strategy_number = static_cast<int>(detailViewerModel->tableStrategyModel->ui_strategy_table[dws->grid_i][dws->grid_j].size());
         }
         int ind = index.row() * detailViewerModel->columns + index.column();
 
         if(ind < strategy_number){
 
-            pair<int,int> strategy_ui_table = detailViewerModel->tableStrategyModel->ui_strategy_table[this->detailWindowSetting->grid_i][this->detailWindowSetting->grid_j][ind];
+            pair<int,int> strategy_ui_table = detailViewerModel->tableStrategyModel->ui_strategy_table[dws->grid_i][dws->grid_j][ind];
             int card1 = strategy_ui_table.first;
             int card2 = strategy_ui_table.second;
             shared_ptr<ActionNode> actionNode = dynamic_pointer_cast<ActionNode>(node);
@@ -360,28 +365,28 @@ void DetailItemDelegate::paint_evs_only(QPainter *painter, const QStyleOptionVie
     initStyleOption(&options, index);
 
     const DetailViewerModel * detailViewerModel = qobject_cast<const DetailViewerModel*>(index.model());
-    //vector<pair<GameActions,float>> strategy = detailViewerModel->tableStrategyModel->get_strategy(this->detailWindowSetting->grid_i,this->detailWindowSetting->grid_j);
     options.text = "";
 
-    if(detailViewerModel->tableStrategyModel->treeItem != NULL &&
-            detailViewerModel->tableStrategyModel->treeItem->m_treedata.lock()->getType() == GameTreeNode::GameTreeNode::ACTION){
+    if (!detailViewerModel || !detailViewerModel->tableStrategyModel) return;
 
-        shared_ptr<GameTreeNode> node = detailViewerModel->tableStrategyModel->treeItem->m_treedata.lock();
+    shared_ptr<GameTreeNode> node = detailViewerModel->tableStrategyModel->getCurrentNode().lock();
+    if(node && node->getType() == GameTreeNode::GameTreeNode::ACTION){
+        const DetailWindowSetting* dws = detailViewerModel->tableStrategyModel->get_detail_window_setting();
+        if (!dws) return;
         int strategy_number = 0;
-        if(this->detailWindowSetting->grid_i >= 0 && this->detailWindowSetting->grid_j >= 0){
-           strategy_number = static_cast<int>(detailViewerModel->tableStrategyModel->ui_strategy_table[this->detailWindowSetting->grid_i][this->detailWindowSetting->grid_j].size());
+        if(dws->grid_i >= 0 && dws->grid_j >= 0){
+           strategy_number = static_cast<int>(detailViewerModel->tableStrategyModel->ui_strategy_table[dws->grid_i][dws->grid_j].size());
         }
 
-        vector<float> evs = detailViewerModel->tableStrategyModel->get_ev_grid(this->detailWindowSetting->grid_i,this->detailWindowSetting->grid_j);
+        vector<float> evs = detailViewerModel->tableStrategyModel->get_ev_grid(dws->grid_i,dws->grid_j);
         std::size_t ind = index.row() * detailViewerModel->columns + index.column();
 
         if(ind < evs.size() && ind < static_cast<size_t>(strategy_number))
         {
             float one_ev = evs[ind];
             float normalized_ev = normalization_tanh(detailViewerModel->tableStrategyModel->get_qsolverjob()->stack,one_ev);
-            //options.text += QString("</br>%1").arg(QString::number(normalized_ev));
 
-            pair<int,int> strategy_ui_table = detailViewerModel->tableStrategyModel->ui_strategy_table[this->detailWindowSetting->grid_i][this->detailWindowSetting->grid_j][ind];
+            pair<int,int> strategy_ui_table = detailViewerModel->tableStrategyModel->ui_strategy_table[dws->grid_i][dws->grid_j][ind];
             int card1 = strategy_ui_table.first;
             int card2 = strategy_ui_table.second;
 
@@ -419,18 +424,25 @@ void DetailItemDelegate::paint(QPainter *painter, const QStyleOptionViewItem &op
              option.rect.width(), option.rect.height());
     QBrush brush(Qt::gray);
     painter->fillRect(rect, brush);
+    
+    const DetailViewerModel * detailViewerModel = qobject_cast<const DetailViewerModel*>(index.model());
+    if (!detailViewerModel || !detailViewerModel->tableStrategyModel || !detailViewerModel->tableStrategyModel->get_detail_window_setting()) {
+        painter->restore();
+        return;
+    }
+    const DetailWindowSetting* dws = detailViewerModel->tableStrategyModel->get_detail_window_setting();
 
-    if(this->detailWindowSetting->mode == DetailWindowSetting::DetailWindowMode::STRATEGY){
+    if(dws->mode == DetailWindowSetting::DetailWindowMode::STRATEGY){
         this->paint_strategy(painter,option,index);
     }
-    else if(this->detailWindowSetting->mode == DetailWindowSetting::DetailWindowMode::RANGE_IP ||
-            this->detailWindowSetting->mode == DetailWindowSetting::DetailWindowMode::RANGE_OOP ){
+    else if(dws->mode == DetailWindowSetting::DetailWindowMode::RANGE_IP ||
+            dws->mode == DetailWindowSetting::DetailWindowMode::RANGE_OOP ){
         this->paint_range(painter,option,index);
     }
-    else if(this->detailWindowSetting->mode == DetailWindowSetting::DetailWindowMode::EV){
+    else if(dws->mode == DetailWindowSetting::DetailWindowMode::EV){
         this->paint_evs(painter,option,index);
     }
-    else if(this->detailWindowSetting->mode == DetailWindowSetting::DetailWindowMode::EV_ONLY){
+    else if(dws->mode == DetailWindowSetting::DetailWindowMode::EV_ONLY){
         this->paint_evs_only(painter,option,index);
     }
 

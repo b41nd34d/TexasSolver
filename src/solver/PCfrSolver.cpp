@@ -25,6 +25,20 @@ PCfrSolver::PCfrSolver(shared_ptr<GameTree> tree, vector<PrivateCards> range1, v
     this->trainer = trainer;
     this->warmup = warmup;
 
+    for (int card_int : this->initial_board) {
+        bool found = false;
+        for (Card& deck_card : deck.getCards()) {
+            if (deck_card.getCardInt() == card_int) {
+                this->initial_board_cards.push_back(deck_card);
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            throw runtime_error("Card from initial board not found in deck: " + Card::intCard2Str(card_int));
+        }
+    }
+
     range1 = this->noDuplicateRange(range1,initial_board_long);
     range2 = this->noDuplicateRange(range2,initial_board_long);
 

@@ -23,17 +23,18 @@ public:
     int rowCount(const QModelIndex &parent = QModelIndex()) const override;
     int columnCount(const QModelIndex &parent = QModelIndex()) const override;
 
-    void setGameTreeNode(TreeItem* item);
+    void setGameTreeNode(const weak_ptr<GameTreeNode>& node);
     void updateStrategyData();
     void setTrunCard(const Card& card);
     void setRiverCard(const Card& card);
     Card getTrunCard() const;
     Card getRiverCard() const;
-    TreeItem* treeItem = nullptr;
+    weak_ptr<GameTreeNode> getCurrentNode() const { return currentNode; }
     vector<pair<GameActions,pair<float,float>>> total_strategy;
     vector<pair<GameActions, float>> get_strategy(int i, int j) const;
     vector<float> get_strategies_evs(int i, int j) const;
-    QSolverJob* get_qsolverjob() const;
+    QSolverJob* get_qsolverjob() const { return qSolverJob; }
+    const DetailWindowSetting* get_detail_window_setting() const { return detailWindowSetting; }
 
     // Members needed by delegates
     vector<vector<vector<pair<int, int>>>> ui_strategy_table;
@@ -49,7 +50,8 @@ public:
 
 private:
     QSolverJob *qSolverJob;
-    DetailWindowSetting* detailWindowSetting;
+    weak_ptr<GameTreeNode> currentNode;
+    DetailWindowSetting* detailWindowSetting; // This pointer is owned by StrategyExplorer
     Card turnCard;
     Card riverCard;
     void build_ui_tables();
