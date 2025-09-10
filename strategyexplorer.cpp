@@ -38,7 +38,7 @@ StrategyExplorer::StrategyExplorer(QWidget *parent,QSolverJob * qSolverJob) :
     // Initize strategy(rough) table
     this->tableStrategyModel = new TableStrategyModel(this->qSolverJob, &(this->detailWindowSetting), this);
     this->ui->strategyTableView->setModel(this->tableStrategyModel);
-    this->delegate_strategy = new StrategyItemDelegate(this->qSolverJob,&(this->detailWindowSetting),this);
+    this->delegate_strategy = new StrategyItemDelegate(this);
     this->ui->strategyTableView->setItemDelegate(this->delegate_strategy);
 
     // Initialize turn and river card selectors based on solver mode
@@ -96,8 +96,6 @@ void StrategyExplorer::initializeView() {
     this->cards.clear();
 
     if (qSolverJob->analysis_mode == QSolverJob::AnalysisMode::HAND_ANALYSIS) {
-        // In hand analysis mode, lock the turn and river cards to the specific hand.
-        vector<Card> full_board_cards = qSolverJob->get_solver()->get_solver()->get_full_board_cards();
         // In hand analysis mode, we must get the card objects directly from the solver
         // to ensure they are fully initialized with their correct deck index.
         // Creating them from a string here would result in "detached" cards that
@@ -108,24 +106,18 @@ void StrategyExplorer::initializeView() {
             return;
         }
 
-        if (full_board_cards.size() >= 4) {
-            Card turn_card = full_board_cards[3];
         // This uses the new public getter added to PCfrSolver.h
         const vector<Card>& solver_board_cards = solver->get_full_board_cards();
 
         if (solver_board_cards.size() >= 4) {
             const Card& turn_card = solver_board_cards[3];
-            this->cards.push_back(turn_card); // Store a copy for local use
             ui->turnCardBox->addItem(QString::fromStdString(turn_card.toFormattedString()));
             ui->turnCardBox->setCurrentIndex(0);
             ui->turnCardBox->setEnabled(false);
             this->tableStrategyModel->setTrunCard(turn_card);
         }
-        if (full_board_cards.size() == 5) {
-            Card river_card = full_board_cards[4];
         if (solver_board_cards.size() == 5) {
             const Card& river_card = solver_board_cards[4];
-            this->cards.push_back(river_card); // Store a copy for local use
             ui->riverCardBox->addItem(QString::fromStdString(river_card.toFormattedString()));
             ui->riverCardBox->setCurrentIndex(0);
             ui->riverCardBox->setEnabled(false);
@@ -187,30 +179,6 @@ void StrategyExplorer::item_expanded(const QModelIndex& index){
     }
 }
 
-void StrategyExplorer::process_board(const TreeItem* treeitem){
-    vector<string> board_str_arr = string_split(this->qSolverJob->board,',');
-    vector<Card> local_cards;
-
-    // Get the initial board cards (e.g. flop) by looking them up in the deck
-    // to ensure they are valid "attached" cards with a deck index.
-    Deck* deck = this->qSolverJob->get_solver()->get_deck();
-    for(const string& one_board_str : board_str_arr) {
-        bool found = false;
-        for(const Card& deck_card : deck->getCards()){
-            if(deck_card.getCard() == one_board_str){
-                local_cards.push_back(deck_card);
-                found = true;
-                break;
-            }
-        }
-        if (!found) {
-            qDebug() << "Warning: board card not found in deck in process_board: " << QString::fromStdString(one_board_str);
-        }
-    }
-
-    if(treeitem != nullptr){
-        if(treeitem->m_treedata.lock()->getRound() == GameTreeNode::GameRound::TURN && !this->tableStrategyModel->getTrunCard().empty()){
-            local_cards.push_back(this->tableStrategyModel->getTrunCard());
 void StrategyExplorer::process_board(shared_ptr<GameTreeNode> node){
     vector<Card> local_cards = this->qSolverJob->get_solver()->get_solver()->get_initial_board_cards();
     if(node){

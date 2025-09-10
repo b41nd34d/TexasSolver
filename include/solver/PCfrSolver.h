@@ -98,6 +98,7 @@ public:
     void train() override;
     void stop() override;
     json dumps(bool with_status,int depth) override;
+    void dumps(std::ostream& stream, bool with_status, int depth) override;
     vector<vector<vector<float>>> get_strategy(shared_ptr<ActionNode> node,vector<Card> chance_cards) override;
     vector<vector<vector<float>>> get_evs(shared_ptr<ActionNode> node,vector<Card> chance_cards) override;
     vector<Card> get_initial_board_cards() override { return this->initial_board_cards; }
@@ -153,8 +154,7 @@ private:
     void findGameSpecificIsomorphisms();
     void purnTree();
     void exchangeRange(json& strategy,int rank1,int rank2,shared_ptr<ActionNode> one_node);
-    void reConvertJson(const shared_ptr<GameTreeNode>& node,json& strategy,string key,int depth,int max_depth,vector<string> prefix,int deal,vector<vector<int>> exchange_color_list);
-
+    void reConvertJson(std::ostream& stream, const shared_ptr<GameTreeNode>& node, const string& key, int depth, int max_depth, vector<string> prefix, int deal, vector<vector<int>> exchange_color_list);
 };
 
 

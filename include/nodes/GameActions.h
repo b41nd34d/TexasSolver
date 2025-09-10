@@ -13,11 +13,11 @@
 class GameActions {
 public:
     GameActions();
-    GameTreeNode::PokerActions getAction();
-    double getAmount();
+    GameTreeNode::PokerActions getAction() const;
+    double getAmount() const;
     GameActions(GameTreeNode::PokerActions action, double amount);
-    string toString();
-    string pokerActionToString(GameTreeNode::PokerActions pokerActions);
+    string toString() const;
+    string pokerActionToString(GameTreeNode::PokerActions pokerActions) const;
 private:
     GameTreeNode::PokerActions action;
     double amount{};

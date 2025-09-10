@@ -133,17 +133,18 @@ void PokerSolver::train(string p1_range, string p2_range, string boards, string 
     this->solver->train();
 }
 
-void PokerSolver::dump_strategy(QString dump_file,int dump_rounds) {
-    //locale &loc=locale::global(locale(locale(),"",LC_CTYPE));
+void PokerSolver::dump_strategy(QString dump_file, int dump_rounds) {
     setlocale(LC_ALL,"");
 
-    json dump_json = this->solver->dumps(false,dump_rounds);
-    //QFile ofile( QString::fromStdString(dump_file));
     ofstream fileWriter;
+    const size_t buffer_size = 32 * 1024 * 1024; // 4MB buffer
+    std::vector<char> buffer(buffer_size);
+
     fileWriter.open(dump_file.toLocal8Bit());
+
     if(!fileWriter.fail()){
-        fileWriter << dump_json;
-        fileWriter.flush();
+        fileWriter.rdbuf()->pubsetbuf(buffer.data(), buffer_size);
+        this->solver->dumps(fileWriter, false, dump_rounds);
         fileWriter.close();
         qDebug().noquote() << QObject::tr("save success");
     }else{

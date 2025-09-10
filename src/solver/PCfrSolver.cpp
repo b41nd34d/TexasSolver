@@ -27,7 +27,7 @@ PCfrSolver::PCfrSolver(shared_ptr<GameTree> tree, vector<PrivateCards> range1, v
 
     for (int card_int : this->initial_board) {
         bool found = false;
-        for (Card& deck_card : deck.getCards()) {
+        for (const Card& deck_card : deck.getCards()) {
             if (deck_card.getCardInt() == card_int) {
                 this->initial_board_cards.push_back(deck_card);
                 found = true;
@@ -908,164 +908,198 @@ void PCfrSolver::train() {
 
 void PCfrSolver::exchangeRange(json& strategy,int rank1,int rank2,shared_ptr<ActionNode> one_node){
     if(rank1 == rank2)return;
+
     int player = one_node->getPlayer();
-    vector<string> range_strs;
-    vector<vector<float>> strategies;
+    const vector<PrivateCards>& range = this->ranges[player];
 
-    for(std::size_t i = 0;i < this->ranges[player].size();i ++){
-        string one_range_str = this->ranges[player][i].toString();
-        if(!strategy.contains(one_range_str)){
-            for(auto one_key:strategy.items()){
-                cout << one_key.key() << endl;
-            }
-            cout << "strategy: " << strategy  << endl;
-            throw runtime_error(tfm::format("%s not exist in strategy",one_range_str));
-        }
-        vector<float> one_strategy = strategy[one_range_str];
-        range_strs.push_back(one_range_str);
-        strategies.push_back(one_strategy);
+    // Create a map for efficient lookup of hand indices. This is much faster
+    // than searching the range vector repeatedly.
+    unordered_map<int, int> hand_hash_to_index;
+    for(size_t i = 0; i < range.size(); ++i) {
+        hand_hash_to_index[range[i].hashCode()] = i;
     }
-    exchange_color(strategies,this->ranges[player],rank1,rank2);
 
-    for(std::size_t i = 0;i < this->ranges[player].size();i ++) {
-        string one_range_str = this->ranges[player][i].toString();
-        vector<float> one_strategy = strategies[i];
-        strategy[one_range_str] = one_strategy;
+    vector<bool> swapped(range.size(), false);
+
+    for(std::size_t i = 0; i < range.size(); i++){
+        if (swapped[i]) {
+            continue;
+        }
+
+        const PrivateCards& pc_i = range[i];
+
+        // Find the isomorphic hand j
+        PrivateCards pc_j = pc_i.exchange_color(rank1, rank2);
+
+        auto it = hand_hash_to_index.find(pc_j.hashCode());
+
+        if (it != hand_hash_to_index.end()) {
+            size_t j = it->second;
+            if (i < j) { // Ensure we only swap each pair once
+                string str_i = pc_i.toString();
+                string str_j = pc_j.toString();
+                if (strategy.contains(str_i) && strategy.contains(str_j)) {
+                    swap(strategy[str_i], strategy[str_j]);
+                    swapped[i] = true;
+                    swapped[j] = true;
+                }
+            }
+        }
     }
 }
 
-void PCfrSolver::reConvertJson(const shared_ptr<GameTreeNode>& node,json& strategy,string key,int depth,int max_depth,vector<string> prefix,int deal,vector<vector<int>> exchange_color_list) {
-    if(depth >= max_depth) return;
-    if(node->getType() == GameTreeNode::GameTreeNodeType::ACTION) {
-        json* retval;
-        if(key != ""){
-            strategy[key] = json();
-            retval = &(strategy[key]);
-        }else{
-            retval = &strategy;
-        }
+void PCfrSolver::reConvertJson(std::ostream& stream, const shared_ptr<GameTreeNode>& node, const string& key, int depth, int max_depth, vector<string> prefix, int deal, vector<vector<int>> exchange_color_list) {
+    if (!key.empty()) {
+        stream << "\"" << key << "\":";
+    }
 
+    if(depth >= max_depth) {
+        stream << "{}";
+        return;
+    }
+
+    stream << "{";
+
+    bool first_property = true;
+    auto write_comma = [&]() {
+        if (!first_property) stream << ",";
+        first_property = false;
+    };
+
+    if(node->getType() == GameTreeNode::GameTreeNodeType::ACTION) {
         shared_ptr<ActionNode> one_node = std::dynamic_pointer_cast<ActionNode>(node);
+
+        write_comma();
+        stream << "\"node_type\":\"action_node\"";
+
+        write_comma();
+        stream << "\"player\":" << one_node->getPlayer();
 
         vector<string> actions_str;
         for(GameActions one_action:one_node->getActions()) actions_str.push_back(one_action.toString());
+        write_comma();
+        stream << "\"actions\":" << json(actions_str);
 
-        (*retval)["actions"] = actions_str;
-        (*retval)["player"] = one_node->getPlayer();
-
-        (*retval)["childrens"] = json();
-        json& childrens = (*retval)["childrens"];
-
-        for(std::size_t i = 0;i < one_node->getActions().size();i ++){
-            GameActions& one_action = one_node->getActions()[i];
-            shared_ptr<GameTreeNode> one_child = one_node->getChildrens()[i];
-            vector<string> new_prefix(prefix);
-            new_prefix.push_back(one_action.toString());
-            this->reConvertJson(one_child,childrens,one_action.toString(),depth,max_depth,new_prefix,deal,exchange_color_list);
-        }
-        if((*retval)["childrens"].empty()){
-            (*retval).erase("childrens");
-        }
         shared_ptr<Trainable> trainable = one_node->getTrainable(deal,false);
         if(trainable != nullptr) {
-            (*retval)["strategy"] = trainable->dump_strategy(false);
+            write_comma();
+            stream << "\"strategy\":";
+            json strategy_json = trainable->dump_strategy(false);
             for(vector<int> one_exchange:exchange_color_list){
                 int rank1 = one_exchange[0];
                 int rank2 = one_exchange[1];
-                this->exchangeRange((*retval)["strategy"]["strategy"],rank1,rank2,one_node);
-
+                this->exchangeRange(strategy_json["strategy"],rank1,rank2,one_node);
             }
+            stream << strategy_json;
         }
-        (*retval)["node_type"] = "action_node";
 
+        const auto& children = one_node->getChildrens();
+        if (!children.empty()) {
+            write_comma();
+            stream << "\"childrens\":{";
+            bool first_child = true;
+            for (size_t i = 0; i < children.size(); ++i) {
+                if (!first_child) stream << ",";
+                first_child = false;
+                const GameActions& one_action = one_node->getActions()[i];
+                const auto& one_child = children[i];
+                vector<string> new_prefix(prefix);
+                new_prefix.push_back(one_action.toString());
+                this->reConvertJson(stream, one_child, one_action.toString(), depth, max_depth, new_prefix, deal, exchange_color_list);
+            }
+            stream << "}";
+        }
     }else if(node->getType() == GameTreeNode::GameTreeNodeType::SHOWDOWN) {
+        write_comma();
+        stream << "\"node_type\":\"showdown_node\"";
     }else if(node->getType() == GameTreeNode::GameTreeNodeType::TERMINAL) {
+        write_comma();
+        stream << "\"node_type\":\"terminal_node\"";
     }else if(node->getType() == GameTreeNode::GameTreeNodeType::CHANCE) {
-        json* retval;
-        if(key != ""){
-            strategy[key] = json();
-            retval = &(strategy[key]);
-        }else{
-            retval = &strategy;
-        }
-
         shared_ptr<ChanceNode> chanceNode = std::dynamic_pointer_cast<ChanceNode>(node);
+
+        write_comma();
+        stream << "\"node_type\":\"chance_node\"";
+
         const vector<Card>& cards = chanceNode->getCards();
-        shared_ptr<GameTreeNode> childerns = chanceNode->getChildren();
-        vector<string> card_strs;
-        for(Card card:cards)
-            card_strs.push_back(card.toString());
+        shared_ptr<GameTreeNode> child_node = chanceNode->getChildren();
 
-        json& dealcards = (*retval)["dealcards"];
-        for(std::size_t i = 0;i < cards.size();i ++){
-            vector<vector<int>> new_exchange_color_list(exchange_color_list);
-            const Card& one_card = cards[i];
-            vector<string> new_prefix(prefix);
-            new_prefix.push_back("Chance:" + one_card.toString());
+        if (!cards.empty()) {
+            write_comma();
+            stream << "\"dealcards\":{";
+            bool first_child = true;
+            for(std::size_t i = 0;i < cards.size();i ++){
+                vector<vector<int>> new_exchange_color_list(exchange_color_list);
+                const Card& one_card = cards[i];
+                vector<string> new_prefix(prefix);
+                new_prefix.push_back("Chance:" + one_card.toString());
 
-            std::size_t card = i;
+                std::size_t card = i;
 
-            int offset = this->color_iso_offset[deal][one_card.getCardInt() % 4];
-            if(offset < 0) {
-                for(std::size_t x = 0;x < cards.size();x ++){
-                    if(
-                            Card::card2int(cards[x]) ==
-                            (Card::card2int(cards[card]) + offset)
-                    ){
-                        card = x;
-                        break;
+                int offset = this->color_iso_offset[deal][one_card.getCardInt() % 4];
+                if(offset < 0) {
+                    for(std::size_t x = 0;x < cards.size();x ++){
+                        if(
+                                Card::card2int(cards[x]) ==
+                                (Card::card2int(one_card) + offset)
+                        ){
+                            card = x;
+                            break;
+                        }
                     }
+                    if(card == i){
+                        throw runtime_error("isomorphism not found while dump strategy");
+                    }
+                    vector<int> one_exchange{one_card.getCardInt() % 4,one_card.getCardInt() % 4 + offset};
+                    new_exchange_color_list.push_back(one_exchange);
                 }
-                if(card == i){
-                    throw runtime_error("isomorphism not found while dump strategy");
-                }
-                vector<int> one_exchange{one_card.getCardInt() % 4,one_card.getCardInt() % 4 + offset};
-                new_exchange_color_list.push_back(one_exchange);
-            }
 
-            int card_num = this->deck.getCards().size();
-            int new_deal;
-            if(deal == 0){
-                new_deal = card + 1;
-            } else if (deal > 0 && deal <= card_num){
-                int origin_deal = deal - 1;
+                int card_num = this->deck.getCards().size();
+                int new_deal;
+                if(deal == 0){
+                    new_deal = card + 1;
+                } else if (deal > 0 && deal <= card_num){
+                    int origin_deal = deal - 1;
 
 #ifdef DEBUG
-                if(origin_deal == card) throw runtime_error("deal should not be equal");
+                    if(origin_deal == static_cast<int>(card)) throw runtime_error("deal should not be equal");
 #endif
-                new_deal = card_num * origin_deal + card;
-                new_deal += (1 + card_num);
-            } else{
-                throw runtime_error(tfm::format("deal out of range : %s ",deal));
-            }
-
-            if(exchange_color_list.size() > 1){
-                throw runtime_error("exchange color list shouldn't be exceed size 1 here");
-            }
-
-            string one_card_str = one_card.toString();
-            if(exchange_color_list.size() == 1) {
-                int rank1 = exchange_color_list[0][0];
-                int rank2 = exchange_color_list[0][1];
-                if(one_card.getCardInt() % 4 == rank1){
-                    one_card_str = Card::intCard2Str(one_card.getCardInt() - rank1 + rank2);
-                }else if(one_card.getCardInt() % 4 == rank2){
-                    one_card_str = Card::intCard2Str(one_card.getCardInt() - rank2 + rank1);
+                    new_deal = card_num * origin_deal + card;
+                    new_deal += (1 + card_num);
+                } else{
+                    throw runtime_error(tfm::format("deal out of range : %s ",deal));
                 }
 
+                if(exchange_color_list.size() > 1){
+                    throw runtime_error("exchange color list shouldn't be exceed size 1 here");
+                }
+
+                string one_card_str = one_card.toString();
+                if(exchange_color_list.size() == 1) {
+                    int rank1 = exchange_color_list[0][0];
+                    int rank2 = exchange_color_list[0][1];
+                    if(one_card.getCardInt() % 4 == rank1){
+                        one_card_str = Card::intCard2Str(one_card.getCardInt() - rank1 + rank2);
+                    }else if(one_card.getCardInt() % 4 == rank2){
+                        one_card_str = Card::intCard2Str(one_card.getCardInt() - rank2 + rank1);
+                    }
+                }
+
+                if (!first_child) stream << ",";
+                first_child = false;
+                this->reConvertJson(stream, child_node, one_card_str, depth + 1, max_depth, new_prefix, new_deal, new_exchange_color_list);
             }
-
-            this->reConvertJson(childerns,dealcards,one_card_str,depth + 1,max_depth,new_prefix,new_deal,new_exchange_color_list);
+            stream << "}";
+            write_comma();
+            stream << "\"deal_number\":" << cards.size();
+        } else {
+            write_comma();
+            stream << "\"deal_number\":0";
         }
-        if((*retval)["dealcards"].empty()){
-            (*retval).erase("dealcards");
-        }
-
-        (*retval)["deal_number"] = dealcards.size();
-        (*retval)["node_type"] = "chance_node";
     }else{
         throw runtime_error("node type unknown!!");
     }
+    stream << "}";
 }
 
 vector<vector<vector<float>>> PCfrSolver::get_strategy(shared_ptr<ActionNode> node,vector<Card> chance_cards){
@@ -1271,11 +1305,18 @@ vector<vector<vector<float>>> PCfrSolver::get_evs(shared_ptr<ActionNode> node,ve
     return ret_evs;
 }
 
+void PCfrSolver::dumps(std::ostream& stream, bool with_status, int depth) {
+    if (with_status) {
+        throw runtime_error("Streaming dump with status is not supported.");
+    }
+    reConvertJson(stream, this->tree->getRoot(), "", 0, depth, vector<string>({"begin"}), 0, vector<vector<int>>());
+}
+
 json PCfrSolver::dumps(bool with_status,int depth) {
     if(with_status == true){
         throw runtime_error("");
     }
-    json retjson;
-    this->reConvertJson(this->tree->getRoot(),retjson,"",0,depth,vector<string>({"begin"}),0,vector<vector<int>>());
-    return std::move(retjson);
+    std::stringstream ss;
+    dumps(ss, with_status, depth);
+    return json::parse(ss.str());
 }
