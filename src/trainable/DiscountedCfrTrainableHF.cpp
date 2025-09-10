@@ -2,6 +2,8 @@
 // based DiscountableCfrTrainable.h from Xuefeng Huang on 2020/1/31.
 
 #include "include/trainable/DiscountedCfrTrainableHF.h"
+#include <sstream>
+
 //#define DEBUG;
 
 DiscountedCfrTrainableHF::DiscountedCfrTrainableHF(vector<PrivateCards> *privateCards,
@@ -152,34 +154,77 @@ void DiscountedCfrTrainableHF::updateRegrets(const vector<float>& regrets, int i
     }
 }
 
-json DiscountedCfrTrainableHF::dump_strategy(bool with_state) {
-    if(with_state) throw runtime_error("state storage not implemented");
-
-    json strategy;
-    const vector<float>& average_strategy = this->getAverageStrategy();
-    vector<GameActions>& game_actions = action_node.getActions();
-    vector<string> actions_str;
-    for(GameActions& one_action:game_actions) {
-        actions_str.push_back(
-                one_action.toString()
-        );
+void DiscountedCfrTrainableHF::dump_strategy(std::ostream& stream, bool with_state, const vector<vector<int>>& exchange_color_list, const shared_ptr<ActionNode>& node) {
+    if (with_state) {
+        stream << "{}";
+        return;
     }
 
-    for(std::size_t i = 0;i < this->privateCards->size();i ++){
-        PrivateCards& one_private_card = (*this->privateCards)[i];
-        vector<float> one_strategy(this->action_number);
+    vector<float> transformed_strategy = this->getAverageStrategy();
 
-        for(int j = 0;j < this->action_number;j ++){
-            int strategy_index = j * this->privateCards->size() + i;
-            one_strategy[j] = average_strategy[strategy_index];
+    if (!exchange_color_list.empty()) {
+        const vector<PrivateCards>& range = *this->privateCards;
+        unordered_map<int, int> hand_hash_to_index;
+        for(size_t i = 0; i < range.size(); ++i) {
+            hand_hash_to_index[range[i].hashCode()] = i;
         }
-        strategy[tfm::format("%s",one_private_card.toString())] = one_strategy;
+
+        for (const auto& one_exchange : exchange_color_list) {
+            int rank1 = one_exchange[0];
+            int rank2 = one_exchange[1];
+            if (rank1 == rank2) continue;
+
+            vector<bool> swapped(range.size(), false);
+            for(std::size_t i = 0; i < range.size(); i++){
+                if (swapped[i]) continue;
+
+                const PrivateCards& pc_i = range[i];
+                PrivateCards pc_j = pc_i.exchange_color(rank1, rank2);
+                auto it = hand_hash_to_index.find(pc_j.hashCode());
+
+                if (it != hand_hash_to_index.end()) {
+                    size_t j = it->second;
+                    if (i < j) {
+                        for (int action_id = 0; action_id < this->action_number; ++action_id) {
+                            size_t index_i = action_id * this->card_number + i;
+                            size_t index_j = action_id * this->card_number + j;
+                            std::swap(transformed_strategy[index_i], transformed_strategy[index_j]);
+                        }
+                        swapped[i] = true;
+                        swapped[j] = true;
+                    }
+                }
+            }
+        }
     }
 
-    json retjson;
-    retjson["actions"] = std::move(actions_str);
-    retjson["strategy"] = std::move(strategy);
-    return std::move(retjson);
+    stream << "{\"actions\":[";
+    const auto& game_actions = node->getActions();
+    for (size_t i = 0; i < game_actions.size(); ++i) {
+        stream << "\"" << game_actions[i].toString() << "\"";
+        if (i < game_actions.size() - 1) stream << ",";
+    }
+    stream << "],\"strategy\":{";
+
+    for(std::size_t i = 0; i < this->privateCards->size(); i++) {
+        const PrivateCards& one_private_card = (*this->privateCards)[i];
+        stream << "\"" << one_private_card.toString() << "\":[";
+
+        for(int j = 0; j < this->action_number; j++) {
+            std::size_t strategy_index = j * this->card_number + i;
+            stream << transformed_strategy[strategy_index];
+            if (j < this->action_number - 1) stream << ",";
+        }
+        stream << "]";
+        if (i < this->privateCards->size() - 1) stream << ",";
+    }
+    stream << "}}";
+}
+
+json DiscountedCfrTrainableHF::dump_strategy(bool with_state) {
+    std::stringstream ss;
+    dump_strategy(ss, with_state, {}, std::make_shared<ActionNode>(action_node));
+    return json::parse(ss.str());
 }
 
 json DiscountedCfrTrainableHF::dump_evs() {

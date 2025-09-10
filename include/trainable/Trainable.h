@@ -4,8 +4,15 @@
 
 #ifndef TEXASSOLVER_TRAINABLE_H
 #define TEXASSOLVER_TRAINABLE_H
+
 #include <vector>
+#include <ostream>
+#include <memory>
 #include "include/json.hpp"
+
+// Forward declaration to prevent circular dependency
+class ActionNode;
+
 using namespace std;
 using json = nlohmann::json;
 
@@ -21,6 +28,7 @@ public:
     virtual void setEv(const vector<float>& evs) = 0;
     virtual void copyStrategy(shared_ptr<Trainable> other_trainable) = 0;
     virtual json dump_strategy(bool with_state) = 0;
+    virtual void dump_strategy(std::ostream& stream, bool with_state, const vector<vector<int>>& exchange_color_list, const shared_ptr<ActionNode>& node) = 0;
     virtual json dump_evs() = 0;
     virtual TrainableType get_type() = 0;
 };

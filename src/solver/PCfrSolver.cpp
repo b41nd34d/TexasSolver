@@ -984,13 +984,7 @@ void PCfrSolver::reConvertJson(std::ostream& stream, const shared_ptr<GameTreeNo
         if(trainable != nullptr) {
             write_comma();
             stream << "\"strategy\":";
-            json strategy_json = trainable->dump_strategy(false);
-            for(vector<int> one_exchange:exchange_color_list){
-                int rank1 = one_exchange[0];
-                int rank2 = one_exchange[1];
-                this->exchangeRange(strategy_json["strategy"],rank1,rank2,one_node);
-            }
-            stream << strategy_json;
+            trainable->dump_strategy(stream, false, exchange_color_list, one_node);
         }
 
         const auto& children = one_node->getChildrens();

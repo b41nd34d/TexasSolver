@@ -137,7 +137,7 @@ void PokerSolver::dump_strategy(QString dump_file, int dump_rounds) {
     setlocale(LC_ALL,"");
 
     ofstream fileWriter;
-    const size_t buffer_size = 32 * 1024 * 1024; // 4MB buffer
+    const size_t buffer_size = 4 * 1024 * 1024; // 4MB buffer
     std::vector<char> buffer(buffer_size);
 
     fileWriter.open(dump_file.toLocal8Bit());
