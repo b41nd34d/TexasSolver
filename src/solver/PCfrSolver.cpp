@@ -1015,6 +1015,48 @@ void PCfrSolver::reConvertJson(std::ostream& stream, const shared_ptr<GameTreeNo
         write_comma();
         stream << "\"node_type\":\"chance_node\"";
 
+        if (this->analysis_mode == Solver::AnalysisMode::HAND_ANALYSIS) {
+            GameTreeNode::GameRound round = chanceNode->getRound();
+            Card next_card;
+            if (round == GameTreeNode::GameRound::TURN) {
+                if (full_board_cards.size() < 4) throw runtime_error("Hand analysis dump requires at least 4 board cards for flop->turn.");
+                next_card = full_board_cards[3];
+            } else if (round == GameTreeNode::GameRound::RIVER) {
+                if (full_board_cards.size() < 5) throw runtime_error("Hand analysis dump requires 5 board cards for turn->river.");
+                next_card = full_board_cards[4];
+            } else {
+                throw runtime_error("Hand analysis dump is only for post-flop chance nodes.");
+            }
+
+            write_comma();
+            stream << "\"dealcards\":{";
+
+            int card_idx = next_card.getNumberInDeckInt();
+            if (card_idx < 0) {
+                throw runtime_error("Card from full_board has invalid deck index during dump: " + next_card.toString());
+            }
+
+            int new_deal;
+            int card_num = this->deck.getCards().size();
+            if (deal == 0) {
+                new_deal = card_idx + 1;
+            } else if (deal > 0 && deal <= card_num) {
+                int origin_deal = deal - 1;
+                new_deal = card_num * origin_deal + card_idx;
+                new_deal += (1 + card_num);
+            } else {
+                throw runtime_error(tfm::format("deal out of range : %s ",deal));
+            }
+
+            vector<string> new_prefix(prefix);
+            new_prefix.push_back("Chance:" + next_card.toString());
+
+            this->reConvertJson(stream, chanceNode->getChildren(), next_card.toString(), depth + 1, max_depth, new_prefix, new_deal, exchange_color_list);
+
+            stream << "}";
+            write_comma();
+            stream << "\"deal_number\":1";
+        } else {
         const vector<Card>& cards = chanceNode->getCards();
         shared_ptr<GameTreeNode> child_node = chanceNode->getChildren();
 
@@ -1089,6 +1131,7 @@ void PCfrSolver::reConvertJson(std::ostream& stream, const shared_ptr<GameTreeNo
         } else {
             write_comma();
             stream << "\"deal_number\":0";
+        }
         }
     }else{
         throw runtime_error("node type unknown!!");
