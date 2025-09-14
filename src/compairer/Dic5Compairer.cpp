@@ -5,11 +5,11 @@
 #include "include/compairer/Dic5Compairer.h"
 
 #include <utility>
+#include <QDataStream>
 #include <QFile>
 #include <QTextStream>
 #include <QDebug>
 #include "time.h"
-#include "unistd.h"
 
 #define SUIT_0_MASK   0x1111111111111
 #define SUIT_1_MASK   0x2222222222222
@@ -51,65 +51,61 @@ void FiveCardsStrength::convert(unordered_map<uint64_t, int>& strength_map) {
     }
 }
 bool FiveCardsStrength::load(const char* file_path) {
-    //ifstream file(file_path, ios::binary);
-    /*if (!file) {
-        file.close();
-        return false;
-    }*/
-
     QFile file(QString::fromStdString(file_path));
-    if (!file.open(QIODevice::ReadOnly)){
-        throw runtime_error("unable to load compairer file");
+    if (!file.open(QIODevice::ReadOnly)) {
+        return false;
     }
+
+    QDataStream in(&file);
+    in.setByteOrder(QDataStream::LittleEndian);
+
     flush_map.clear(); other_map.clear();
-    int size_key = sizeof(uint64_t), size_int = sizeof(int), val, cnt = 0;
-    uint64_t key = 0;
-    char* p_key = (char*)&key, * p_val = (char*)&val, * p_cnt = (char*)&cnt;
-    file.read(p_cnt, size_int);// 读取行数
-    for (int i = 0; i < cnt; i++) {
-        file.read(p_key, size_key);
-        file.read(p_val, size_int);
-        flush_map[key] = val;
+
+    qint32 flush_map_size;
+    in >> flush_map_size;
+    if (in.status() != QDataStream::Ok) return false;
+
+    for (qint32 i = 0; i < flush_map_size; ++i) {
+        quint64 key;
+        qint32 value;
+        in >> key >> value;
+        if (in.status() != QDataStream::Ok) return false;
+        flush_map[key] = value;
     }
-    assert(flush_map.size() == cnt);
-    file.read(p_cnt, size_int);// 读取行数
-    for (int i = 0; i < cnt; i++) {
-        file.read(p_key, size_key);
-        file.read(p_val, size_int);
-        other_map[key] = val;
+
+    qint32 other_map_size;
+    in >> other_map_size;
+    if (in.status() != QDataStream::Ok) return false;
+
+    for (qint32 i = 0; i < other_map_size; ++i) {
+        quint64 key;
+        qint32 value;
+        in >> key >> value;
+        if (in.status() != QDataStream::Ok) return false;
+        other_map[key] = value;
     }
-    assert(other_map.size() == cnt);
+
     file.close();
     return true;
 }
 bool FiveCardsStrength::save(const char* file_path) {
-    //qDebug() << "a";
-    //sleep(10);
-    //qDebug() << "b";
-    //file_path = "/Users/bytedance/Desktop/card5_dic_zipped_shortdeck.bin";
-    ofstream file(file_path, ios::binary);
-    if (!file) {
-        file.close();
+    QFile file(QString::fromStdString(file_path));
+    if (!file.open(QIODevice::WriteOnly)) {
         return false;
     }
-    int size_key = sizeof(uint64_t), size_int = sizeof(int), val = flush_map.size();
-    uint64_t key = 0;
-    char* p_key = (char*)&key, * p_val = (char*)&val;
-    file.write(p_val, size_int);// 写入行数
-    auto it = flush_map.begin(), it_end = flush_map.end();
-    for (; it != it_end; it++) {
-        key = it->first; val = it->second;
-        file.write(p_key, size_key);
-        file.write(p_val, size_int);
+    QDataStream out(&file);
+    out.setByteOrder(QDataStream::LittleEndian);
+
+    out << static_cast<qint32>(flush_map.size());
+    for (auto const& [key, val] : flush_map) {
+        out << static_cast<quint64>(key) << static_cast<qint32>(val);
     }
-    val = other_map.size();
-    file.write(p_val, size_int);// 写入行数
-    it = other_map.begin(), it_end = other_map.end();
-    for (; it != it_end; it++) {
-        key = it->first; val = it->second;
-        file.write(p_key, size_key);
-        file.write(p_val, size_int);
+
+    out << static_cast<qint32>(other_map.size());
+    for (auto const& [key, val] : other_map) {
+        out << static_cast<quint64>(key) << static_cast<qint32>(val);
     }
+
     file.close();
     return true;
 }
@@ -198,26 +194,26 @@ Compairer::CompairResult Dic5Compairer::compairRanks(int rank_former, int rank_l
     }
 }
 
-Compairer::CompairResult
-Dic5Compairer::compair(vector<Card> private_former, vector<Card> private_latter, vector<Card> public_board) {
+template<typename T>
+Compairer::CompairResult Dic5Compairer::compair_template(const vector<T>& private_former, const vector<T>& private_latter, const vector<T>& public_board) {
     if(private_former.size() != 2)
         throw runtime_error(
                 tfm::format("private former size incorrect,excepted 2, actually %s",private_former.size())
-                );
+        );
     if(private_latter.size() != 2)
         throw runtime_error(
                 tfm::format("private latter size incorrect,excepted 2, actually %s",private_latter.size())
         );
     if(public_board.size() != 5)
         throw runtime_error(
-                tfm::format("public board size incorrect,excepted 2, actually %s",public_board.size())
+                tfm::format("public board size incorrect,excepted 5, actually %s",public_board.size())
         );
 
-    vector<Card> former_cards(private_former);
+    vector<T> former_cards(private_former);
     former_cards.insert(former_cards.end(),public_board.begin(),public_board.end());
     int rank_former = this->getRank(former_cards);
 
-    vector<Card> latter_cards(private_latter);
+    vector<T> latter_cards(private_latter);
     latter_cards.insert(latter_cards.end(),public_board.begin(),public_board.end());
     int rank_latter = this->getRank(latter_cards);
 
@@ -225,29 +221,13 @@ Dic5Compairer::compair(vector<Card> private_former, vector<Card> private_latter,
 }
 
 Compairer::CompairResult
+Dic5Compairer::compair(vector<Card> private_former, vector<Card> private_latter, vector<Card> public_board) {
+    return compair_template(private_former, private_latter, public_board);
+}
+
+Compairer::CompairResult
 Dic5Compairer::compair(vector<int> private_former, vector<int> private_latter, vector<int> public_board) {
-    if(private_former.size() != 2)
-        throw runtime_error(
-                tfm::format("private former size incorrect,excepted 2, actually %s",private_former.size())
-        );
-    if(private_latter.size() != 2)
-        throw runtime_error(
-                tfm::format("private latter size incorrect,excepted 2, actually %s",private_latter.size())
-        );
-    if(public_board.size() != 5)
-        throw runtime_error(
-                tfm::format("public board size incorrect,excepted 2, actually %s",public_board.size())
-        );
-
-    vector<int> former_cards(private_former);
-    former_cards.insert(former_cards.end(),public_board.begin(),public_board.end());
-    int rank_former = this->getRank(former_cards);
-
-    vector<int> latter_cards(private_latter);
-    latter_cards.insert(latter_cards.end(),public_board.begin(),public_board.end());
-    int rank_latter = this->getRank(latter_cards);
-
-    return this->compairRanks(rank_former,rank_latter);
+    return compair_template(private_former, private_latter, public_board);
 }
 
 int Dic5Compairer::getRank(vector<Card> cards) {
@@ -287,4 +267,3 @@ int Dic5Compairer::get_rank(vector<int> private_hand, vector<int> public_board) 
 int Dic5Compairer::get_rank(uint64_t private_hand, uint64_t public_board) {
     return this->get_rank(Card::long2board(private_hand),Card::long2board(public_board));
 }
-

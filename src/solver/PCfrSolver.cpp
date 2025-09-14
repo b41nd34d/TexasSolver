@@ -15,13 +15,29 @@ PCfrSolver::~PCfrSolver(){
 }
 
 PCfrSolver::PCfrSolver(shared_ptr<GameTree> tree, vector<PrivateCards> range1, vector<PrivateCards> range2,
-                     vector<int> initial_board, shared_ptr<Compairer> compairer, Deck deck, int iteration_number, bool debug,
-                     int print_interval, string logfile, string trainer, Solver::MonteCarolAlg monteCarolAlg,int warmup,float accuracy,bool use_isomorphism,int use_halffloats,int num_threads) :Solver(tree){
+                     vector<int> initial_board, shared_ptr<Compairer> compairer, Deck deck, int iteration_number,
+                     bool debug, int print_interval, string logfile, string trainer, Solver::MonteCarolAlg monteCarolAlg,
+                     int warmup,float accuracy,bool use_isomorphism,int use_halffloats,int num_threads,
+                     Solver::AnalysisMode analysis_mode, const string& full_board) :Solver(tree){
     this->initial_board = initial_board;
-    this->initial_board_long = Card::boardInts2long(initial_board);
+    this->initial_board_long = Card::boardInts2long(this->initial_board);
     this->logfile = logfile;
     this->trainer = trainer;
     this->warmup = warmup;
+
+    for (int card_int : this->initial_board) {
+        bool found = false;
+        for (const Card& deck_card : deck.getCards()) {
+            if (deck_card.getCardInt() == card_int) {
+                this->initial_board_cards.push_back(deck_card);
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            throw runtime_error("Card from initial board not found in deck: " + Card::intCard2Str(card_int));
+        }
+    }
 
     range1 = this->noDuplicateRange(range1,initial_board_long);
     range2 = this->noDuplicateRange(range2,initial_board_long);
@@ -55,6 +71,28 @@ PCfrSolver::PCfrSolver(shared_ptr<GameTree> tree, vector<PrivateCards> range1, v
     }
     qDebug().noquote() << QString::fromStdString(tfm::format(QObject::tr("Using %s threads").toStdString().c_str(),num_threads));
     this->num_threads = num_threads;
+    this->analysis_mode = analysis_mode;
+    if (this->analysis_mode == Solver::AnalysisMode::HAND_ANALYSIS) {
+        if (full_board.empty()) {
+            throw runtime_error("Hand analysis mode requires a full board, but the board string is empty.");
+        }
+        vector<string> card_strs = string_split(full_board, ',');
+        for (const string& one_card_str : card_strs) {
+            if (one_card_str.empty()) continue;
+            bool found = false;
+            for(const Card& deck_card : this->deck.getCards()){
+                if(deck_card.getCard() == one_card_str){
+                    this->full_board_cards.push_back(deck_card);
+                    found = true;
+                    break;
+                }
+            }
+            if(!found){
+                throw runtime_error("Card from board string not found in deck: " + one_card_str);
+            }
+        }
+        this->full_board_long = Card::boardCards2long(this->full_board_cards);
+    }
     this->distributing_task = false;
     omp_set_num_threads(this->num_threads);
     setTrainable(this->tree->getRoot());
@@ -167,13 +205,10 @@ vector<int> PCfrSolver::getAllAbstractionDeal(int deal){
     } else if (deal > 0 && deal <= card_num){
         int origin_deal = int((deal - 1) / 4) * 4;
         for(int i = 0;i < 4;i ++){
-            int one_card = origin_deal + i + 1;
-
-            Card *first_card = const_cast<Card *>(&(this->deck.getCards()[origin_deal + i]));
-            uint64_t first_long = Card::boardInt2long(
-                    first_card->getCardInt());
+            const Card& first_card = this->deck.getCards()[origin_deal + i];
+            uint64_t first_long = Card::boardInt2long(first_card.getCardInt());
             if (Card::boardsHasIntercept(first_long, this->initial_board_long))continue;
-            all_deal.push_back(one_card);
+            all_deal.push_back(origin_deal + i + 1);
         }
     } else{
         //cout << "______________________" << endl;
@@ -184,17 +219,12 @@ vector<int> PCfrSolver::getAllAbstractionDeal(int deal){
         for(int i = 0;i < 4;i ++) {
             for(int j = 0;j < 4;j ++) {
                 if(first_deal == second_deal && i == j) continue;
-
-                Card *first_card = const_cast<Card *>(&(this->deck.getCards()[first_deal + i]));
-                uint64_t first_long = Card::boardInt2long(
-                        first_card->getCardInt());
+                const Card& first_card = this->deck.getCards()[first_deal + i];
+                uint64_t first_long = Card::boardInt2long(first_card.getCardInt());
                 if (Card::boardsHasIntercept(first_long, this->initial_board_long))continue;
-
-                Card *second_card = const_cast<Card *>(&(this->deck.getCards()[second_deal + j]));
-                uint64_t second_long = Card::boardInt2long(
-                        second_card->getCardInt());
+                const Card& second_card = this->deck.getCards()[second_deal + j];
+                uint64_t second_long = Card::boardInt2long(second_card.getCardInt());
                 if (Card::boardsHasIntercept(second_long, this->initial_board_long))continue;
-
                 int one_card = card_num * (first_deal + i) + (second_deal + j) + 1 + card_num;
                 //cout << ";" << this->deck.getCards()[first_deal + i].toString() << "," << this->deck.getCards()[second_deal + j].toString();
                 all_deal.push_back(one_card);
@@ -228,7 +258,53 @@ vector<float> PCfrSolver::cfr(int player, shared_ptr<GameTreeNode> node, const v
 vector<float>
 PCfrSolver::chanceUtility(int player, shared_ptr<ChanceNode> node, const vector<float> &reach_probs, int iter,
                          uint64_t current_board,int deal) {
-    vector<Card>& cards = this->deck.getCards();
+    const vector<Card>& cards = this->deck.getCards();
+
+    if (this->analysis_mode == Solver::AnalysisMode::HAND_ANALYSIS) {
+        GameTreeNode::GameRound round = node->getRound();
+        Card next_card;
+        if (round == GameTreeNode::GameRound::TURN) {
+            if (full_board_cards.size() < 4) throw runtime_error("Hand analysis requires at least 4 board cards for flop->turn.");
+            next_card = full_board_cards[3];
+        } else if (round == GameTreeNode::GameRound::RIVER) {
+            if (full_board_cards.size() < 5) throw runtime_error("Hand analysis requires 5 board cards for turn->river.");
+            next_card = full_board_cards[4];
+        } else {
+            throw runtime_error("Hand analysis mode is only for post-flop chance nodes.");
+        }
+
+        int card_idx = next_card.getNumberInDeckInt();
+        uint64_t card_long = Card::boardInt2long(next_card.getCardInt());
+        uint64_t new_board_long = current_board | card_long;
+
+        vector<float> new_reach_probs = vector<float>(this->ranges[1 - player].size());
+        int possible_deals = node->getCards().size() - Card::long2board(current_board).size() - 2;
+        int oppo = 1 - player;
+
+        for (size_t player_hand = 0; player_hand < this->ranges[oppo].size(); player_hand++) {
+            PrivateCards &one_private = this->ranges[oppo][player_hand];
+            if (Card::boardsHasIntercept(card_long, one_private.toBoardLong())) {
+                new_reach_probs[player_hand] = 0;
+            } else {
+                new_reach_probs[player_hand] = reach_probs[player_hand];
+            }
+        }
+
+        int new_deal;
+        int card_num = this->deck.getCards().size();
+        if (deal == 0) {
+            new_deal = card_idx + 1;
+        } else if (deal > 0 && deal <= card_num) {
+            int origin_deal = deal - 1;
+            new_deal = card_num * origin_deal + card_idx;
+            new_deal += (1 + card_num);
+        } else {
+            // This case (dealing a 3rd card post-flop) shouldn't happen in Texas Hold'em.
+            throw runtime_error("Hand analysis with more than two dealt cards is not supported.");
+        }
+        return this->cfr(player, node->getChildren(), new_reach_probs, iter, new_board_long, new_deal);
+    }
+
     //float[] cardWeights = getCardsWeights(player,reach_probs[1 - player],current_board);
 
     int card_num = node->getCards().size();
@@ -265,20 +341,10 @@ PCfrSolver::chanceUtility(int player, shared_ptr<ChanceNode> node, const vector<
             int multiplier_num = 0;
             for (int i = 0; i < 4; i++) {
                 int i_card = card_base * 4 + i;
-                if (i == cardr) {
-                    Card *one_card = const_cast<Card *>(&(node->getCards()[i_card]));
-                    uint64_t card_long = Card::boardInt2long(
-                            one_card->getCardInt());
-                    if (!Card::boardsHasIntercept(card_long, current_board)) {
-                        multiplier_num += 1;
-                    }
-                } else {
-                    Card *one_card = const_cast<Card *>(&(node->getCards()[i_card]));
-                    uint64_t card_long = Card::boardInt2long(
-                            one_card->getCardInt());
-                    if (!Card::boardsHasIntercept(card_long, current_board)) {
-                        multiplier_num += 1;
-                    }
+                const Card& one_card = node->getCards()[i_card];
+                uint64_t card_long = Card::boardInt2long(one_card.getCardInt());
+                if (!Card::boardsHasIntercept(card_long, current_board)) {
+                    multiplier_num += 1;
                 }
             }
             multiplier[card_target] = multiplier_num;
@@ -290,20 +356,20 @@ PCfrSolver::chanceUtility(int player, shared_ptr<ChanceNode> node, const vector<
 
     for(std::size_t card = 0;card < node->getCards().size();card ++) {
         shared_ptr<GameTreeNode> one_child = node->getChildren();
-        Card *one_card = const_cast<Card *>(&(node->getCards()[card]));
-        uint64_t card_long = Card::boardInt2long(one_card->getCardInt());//Card::boardCards2long(new Card[]{one_card});
+        const Card& one_card = node->getCards()[card];
+        uint64_t card_long = Card::boardInt2long(one_card.getCardInt());//Card::boardCards2long(new Card[]{one_card});
         if (Card::boardsHasIntercept(card_long, current_board)) continue;
         if (iter <= this->warmup && multiplier[card] == 0) continue;
-        if (this->color_iso_offset[deal][one_card->getCardInt() % 4] < 0) continue;
+        if (this->color_iso_offset[deal][one_card.getCardInt() % 4] < 0) continue;
         valid_cards.push_back(card);
     }
 
     #pragma omp parallel for schedule(static)
-    for(std::size_t valid_ind = 0;valid_ind < valid_cards.size();valid_ind++) {
-        int card = valid_cards[valid_ind];
+    for(int valid_ind = 0; valid_ind < static_cast<int>(valid_cards.size()); valid_ind++) {
+        int card = valid_cards[static_cast<size_t>(valid_ind)];
         shared_ptr<GameTreeNode> one_child = node->getChildren();
-        Card *one_card = const_cast<Card *>(&(node->getCards()[card]));
-        uint64_t card_long = Card::boardInt2long(one_card->getCardInt());//Card::boardCards2long(new Card[]{one_card});
+        const Card& one_card = node->getCards()[card];
+        uint64_t card_long = Card::boardInt2long(one_card.getCardInt());//Card::boardCards2long(new Card[]{one_card});
 
         uint64_t new_board_long = current_board | card_long;
         if (this->monteCarolAlg == MonteCarolAlg::PUBLIC) {
@@ -355,28 +421,28 @@ PCfrSolver::chanceUtility(int player, shared_ptr<ChanceNode> node, const vector<
             throw runtime_error(tfm::format("deal out of range : %s ",deal));
         }
         if(this->distributing_task && node->getRound() == this->split_round) {
-            results[one_card->getNumberInDeckInt()] = vector<float>(this->ranges[player].size());
+            results[one_card.getNumberInDeckInt()] = vector<float>(this->ranges[player].size());
             //TaskParams taskParams = TaskParams();
         }else {
             vector<float> child_utility = this->cfr(player, one_child, new_reach_probs, iter, new_board_long, new_deal);
-            results[one_card->getNumberInDeckInt()] = child_utility;
+            results[one_card.getNumberInDeckInt()] = child_utility;
         }
     }
 
     for(std::size_t card = 0;card < node->getCards().size();card ++) {
-        Card *one_card = const_cast<Card *>(&(node->getCards()[card]));
+        const Card& one_card = node->getCards()[card];
         vector<float> child_utility;
-        int offset = this->color_iso_offset[deal][one_card->getCardInt() % 4];
+        int offset = this->color_iso_offset[deal][one_card.getCardInt() % 4];
         if(offset < 0) {
-            int rank1 = one_card->getCardInt() % 4;
+            int rank1 = one_card.getCardInt() % 4;
             int rank2 = rank1 + offset;
 #ifdef DEBUG
             if(rank2 < 0) throw runtime_error("rank error");
 #endif
-            child_utility = results[one_card->getNumberInDeckInt() + offset];
+            child_utility = results[one_card.getNumberInDeckInt() + offset];
             exchange_color(child_utility,this->pcm.getPreflopCards(player),rank1,rank2);
         }else{
-            child_utility = results[one_card->getNumberInDeckInt()];
+            child_utility = results[one_card.getNumberInDeckInt()];
         }
         if(child_utility.empty())
             continue;
@@ -522,11 +588,7 @@ PCfrSolver::actionUtility(int player, shared_ptr<ActionNode> node, const vector<
         if(!this->distributing_task && !this->collecting_statics) {
             if (iter > this->warmup) {
                 trainable->updateRegrets(regrets, iter + 1, reach_probs);
-            }/*else if(iter < this->warmup){
-            vector<int> deals = this->getAllAbstractionDeal(deal);
-            shared_ptr<Trainable> one_trainable = node->getTrainable(deals[0]);
-            one_trainable->updateRegrets(regrets, iter + 1, reach_probs[player]);
-            }*/
+            }
             else {
                 // iter == this->warmup
                 vector<int> deals = this->getAllAbstractionDeal(deal);
@@ -603,11 +665,11 @@ PCfrSolver::showdownUtility(int player, shared_ptr<ShowdownNode> node, const vec
 
     vector<float> payoffs = vector<float>(player_private_cards.size());
 
-    float winsum = 0;
+    double winsum = 0;
     vector<float> card_winsum = vector<float> (52);//node->card_sum;
     fill(card_winsum.begin(),card_winsum.end(),0);
 
-    int j = 0;
+    size_t j = 0;
     for(std::size_t i = 0;i < player_combs.size();i ++){
         const RiverCombs& one_player_comb = player_combs[i];
         while (j < oppo_combs.size() && one_player_comb.rank < oppo_combs[j].rank){
@@ -617,28 +679,28 @@ PCfrSolver::showdownUtility(int player, shared_ptr<ShowdownNode> node, const vec
             card_winsum[one_oppo_comb.private_cards.card2] += reach_probs[one_oppo_comb.reach_prob_index];
             j ++;
         }
-        payoffs[one_player_comb.reach_prob_index] = (winsum
+        payoffs[one_player_comb.reach_prob_index] = static_cast<float>(winsum
                                                      - card_winsum[one_player_comb.private_cards.card1]
                                                      - card_winsum[one_player_comb.private_cards.card2]
                                                     ) * win_payoff;
     }
 
     // 计算失败时的payoff
-    float losssum = 0;
+    double losssum = 0;
     vector<float>& card_losssum = card_winsum;
     fill(card_losssum.begin(),card_losssum.end(),0);
 
-    j = oppo_combs.size() - 1;
-    for(int i = player_combs.size() - 1;i >= 0;i --){
+    long long j_rev = static_cast<long long>(oppo_combs.size()) - 1;
+    for(long long i = static_cast<long long>(player_combs.size()) - 1;i >= 0;i --){
         const RiverCombs& one_player_comb = player_combs[i];
-        while (j >= 0 && one_player_comb.rank > oppo_combs[j].rank){
-            const RiverCombs& one_oppo_comb = oppo_combs[j];
+        while (j_rev >= 0 && one_player_comb.rank > oppo_combs[j_rev].rank){
+            const RiverCombs& one_oppo_comb = oppo_combs[j_rev];
             losssum += reach_probs[one_oppo_comb.reach_prob_index];
             card_losssum[one_oppo_comb.private_cards.card1] += reach_probs[one_oppo_comb.reach_prob_index];
             card_losssum[one_oppo_comb.private_cards.card2] += reach_probs[one_oppo_comb.reach_prob_index];
-            j --;
+            j_rev --;
         }
-        payoffs[one_player_comb.reach_prob_index] += (losssum
+        payoffs[one_player_comb.reach_prob_index] += static_cast<float>(losssum
                                                       - card_losssum[one_player_comb.private_cards.card1]
                                                       - card_losssum[one_player_comb.private_cards.card2]
                                                      ) * lose_payoff;
@@ -691,7 +753,7 @@ PCfrSolver::terminalUtility(int player, shared_ptr<TerminalNode> node, const vec
 
 void PCfrSolver::findGameSpecificIsomorphisms() {
     // hand isomorphisms
-    vector<Card> board_cards = Card::long2boardCards(this->initial_board_long);
+    vector<Card> board_cards = Card::long2boardCards(this->initial_board_long, this->deck);
     for(int i = 0;i <= 1;i ++){
         vector<PrivateCards>& range = i == 0?this->range1:this->range2;
         for(std::size_t i_range = 0;i_range < range.size();i_range ++) {
@@ -775,7 +837,8 @@ void PCfrSolver::train() {
         this->findGameSpecificIsomorphisms();
     }
 
-    BestResponse br = BestResponse(player_privates,this->player_number,this->pcm,this->rrm,this->deck,this->debug,this->color_iso_offset,this->split_round,this->num_threads,this->use_halffloats);
+    BestResponse br = BestResponse(player_privates,this->player_number,this->pcm,this->rrm,this->deck,this->debug,this->color_iso_offset,this->split_round,this->num_threads,this->use_halffloats,
+                                   this->analysis_mode, this->full_board_cards);
 
     br.printExploitability(tree->getRoot(), 0, tree->getRoot()->getPot(), initial_board_long);
 
@@ -849,164 +912,235 @@ void PCfrSolver::train() {
 
 void PCfrSolver::exchangeRange(json& strategy,int rank1,int rank2,shared_ptr<ActionNode> one_node){
     if(rank1 == rank2)return;
+
     int player = one_node->getPlayer();
-    vector<string> range_strs;
-    vector<vector<float>> strategies;
+    const vector<PrivateCards>& range = this->ranges[player];
 
-    for(std::size_t i = 0;i < this->ranges[player].size();i ++){
-        string one_range_str = this->ranges[player][i].toString();
-        if(!strategy.contains(one_range_str)){
-            for(auto one_key:strategy.items()){
-                cout << one_key.key() << endl;
-            }
-            cout << "strategy: " << strategy  << endl;
-            throw runtime_error(tfm::format("%s not exist in strategy",one_range_str));
-        }
-        vector<float> one_strategy = strategy[one_range_str];
-        range_strs.push_back(one_range_str);
-        strategies.push_back(one_strategy);
+    // Create a map for efficient lookup of hand indices. This is much faster
+    // than searching the range vector repeatedly.
+    unordered_map<int, int> hand_hash_to_index;
+    for(size_t i = 0; i < range.size(); ++i) {
+        hand_hash_to_index[range[i].hashCode()] = i;
     }
-    exchange_color(strategies,this->ranges[player],rank1,rank2);
 
-    for(std::size_t i = 0;i < this->ranges[player].size();i ++) {
-        string one_range_str = this->ranges[player][i].toString();
-        vector<float> one_strategy = strategies[i];
-        strategy[one_range_str] = one_strategy;
+    vector<bool> swapped(range.size(), false);
+
+    for(std::size_t i = 0; i < range.size(); i++){
+        if (swapped[i]) {
+            continue;
+        }
+
+        const PrivateCards& pc_i = range[i];
+
+        // Find the isomorphic hand j
+        PrivateCards pc_j = pc_i.exchange_color(rank1, rank2);
+
+        auto it = hand_hash_to_index.find(pc_j.hashCode());
+
+        if (it != hand_hash_to_index.end()) {
+            size_t j = it->second;
+            if (i < j) { // Ensure we only swap each pair once
+                string str_i = pc_i.toString();
+                string str_j = pc_j.toString();
+                if (strategy.contains(str_i) && strategy.contains(str_j)) {
+                    swap(strategy[str_i], strategy[str_j]);
+                    swapped[i] = true;
+                    swapped[j] = true;
+                }
+            }
+        }
     }
 }
 
-void PCfrSolver::reConvertJson(const shared_ptr<GameTreeNode>& node,json& strategy,string key,int depth,int max_depth,vector<string> prefix,int deal,vector<vector<int>> exchange_color_list) {
-    if(depth >= max_depth) return;
-    if(node->getType() == GameTreeNode::GameTreeNodeType::ACTION) {
-        json* retval;
-        if(key != ""){
-            strategy[key] = json();
-            retval = &(strategy[key]);
-        }else{
-            retval = &strategy;
-        }
+void PCfrSolver::reConvertJson(std::ostream& stream, const shared_ptr<GameTreeNode>& node, const string& key, int depth, int max_depth, vector<string> prefix, int deal, vector<vector<int>> exchange_color_list) {
+    if (!key.empty()) {
+        stream << "\"" << key << "\":";
+    }
 
+    if(depth >= max_depth) {
+        stream << "{}";
+        return;
+    }
+
+    stream << "{";
+
+    bool first_property = true;
+    auto write_comma = [&]() {
+        if (!first_property) stream << ",";
+        first_property = false;
+    };
+
+    if(node->getType() == GameTreeNode::GameTreeNodeType::ACTION) {
         shared_ptr<ActionNode> one_node = std::dynamic_pointer_cast<ActionNode>(node);
+
+        write_comma();
+        stream << "\"node_type\":\"action_node\"";
+
+        write_comma();
+        stream << "\"player\":" << one_node->getPlayer();
 
         vector<string> actions_str;
         for(GameActions one_action:one_node->getActions()) actions_str.push_back(one_action.toString());
+        write_comma();
+        stream << "\"actions\":" << json(actions_str);
 
-        (*retval)["actions"] = actions_str;
-        (*retval)["player"] = one_node->getPlayer();
-
-        (*retval)["childrens"] = json();
-        json& childrens = (*retval)["childrens"];
-
-        for(std::size_t i = 0;i < one_node->getActions().size();i ++){
-            GameActions& one_action = one_node->getActions()[i];
-            shared_ptr<GameTreeNode> one_child = one_node->getChildrens()[i];
-            vector<string> new_prefix(prefix);
-            new_prefix.push_back(one_action.toString());
-            this->reConvertJson(one_child,childrens,one_action.toString(),depth,max_depth,new_prefix,deal,exchange_color_list);
-        }
-        if((*retval)["childrens"].empty()){
-            (*retval).erase("childrens");
-        }
         shared_ptr<Trainable> trainable = one_node->getTrainable(deal,false);
         if(trainable != nullptr) {
-            (*retval)["strategy"] = trainable->dump_strategy(false);
-            for(vector<int> one_exchange:exchange_color_list){
-                int rank1 = one_exchange[0];
-                int rank2 = one_exchange[1];
-                this->exchangeRange((*retval)["strategy"]["strategy"],rank1,rank2,one_node);
-
-            }
+            write_comma();
+            stream << "\"strategy\":";
+            trainable->dump_strategy(stream, false, exchange_color_list, one_node);
         }
-        (*retval)["node_type"] = "action_node";
 
+        const auto& children = one_node->getChildrens();
+        if (!children.empty()) {
+            write_comma();
+            stream << "\"childrens\":{";
+            bool first_child = true;
+            for (size_t i = 0; i < children.size(); ++i) {
+                if (!first_child) stream << ",";
+                first_child = false;
+                const GameActions& one_action = one_node->getActions()[i];
+                const auto& one_child = children[i];
+                vector<string> new_prefix(prefix);
+                new_prefix.push_back(one_action.toString());
+                this->reConvertJson(stream, one_child, one_action.toString(), depth, max_depth, new_prefix, deal, exchange_color_list);
+            }
+            stream << "}";
+        }
     }else if(node->getType() == GameTreeNode::GameTreeNodeType::SHOWDOWN) {
+        write_comma();
+        stream << "\"node_type\":\"showdown_node\"";
     }else if(node->getType() == GameTreeNode::GameTreeNodeType::TERMINAL) {
+        write_comma();
+        stream << "\"node_type\":\"terminal_node\"";
     }else if(node->getType() == GameTreeNode::GameTreeNodeType::CHANCE) {
-        json* retval;
-        if(key != ""){
-            strategy[key] = json();
-            retval = &(strategy[key]);
-        }else{
-            retval = &strategy;
-        }
-
         shared_ptr<ChanceNode> chanceNode = std::dynamic_pointer_cast<ChanceNode>(node);
-        const vector<Card>& cards = chanceNode->getCards();
-        shared_ptr<GameTreeNode> childerns = chanceNode->getChildren();
-        vector<string> card_strs;
-        for(Card card:cards)
-            card_strs.push_back(card.toString());
 
-        json& dealcards = (*retval)["dealcards"];
-        for(std::size_t i = 0;i < cards.size();i ++){
-            vector<vector<int>> new_exchange_color_list(exchange_color_list);
-            Card& one_card = const_cast<Card &>(cards[i]);
-            vector<string> new_prefix(prefix);
-            new_prefix.push_back("Chance:" + one_card.toString());
+        write_comma();
+        stream << "\"node_type\":\"chance_node\"";
 
-            std::size_t card = i;
-
-            int offset = this->color_iso_offset[deal][one_card.getCardInt() % 4];
-            if(offset < 0) {
-                for(std::size_t x = 0;x < cards.size();x ++){
-                    if(
-                            Card::card2int(cards[x]) ==
-                            (Card::card2int(cards[card]) + offset)
-                    ){
-                        card = x;
-                        break;
-                    }
-                }
-                if(card == i){
-                    throw runtime_error("isomorphism not found while dump strategy");
-                }
-                vector<int> one_exchange{one_card.getCardInt() % 4,one_card.getCardInt() % 4 + offset};
-                new_exchange_color_list.push_back(one_exchange);
+        if (this->analysis_mode == Solver::AnalysisMode::HAND_ANALYSIS) {
+            GameTreeNode::GameRound round = chanceNode->getRound();
+            Card next_card;
+            if (round == GameTreeNode::GameRound::TURN) {
+                if (full_board_cards.size() < 4) throw runtime_error("Hand analysis dump requires at least 4 board cards for flop->turn.");
+                next_card = full_board_cards[3];
+            } else if (round == GameTreeNode::GameRound::RIVER) {
+                if (full_board_cards.size() < 5) throw runtime_error("Hand analysis dump requires 5 board cards for turn->river.");
+                next_card = full_board_cards[4];
+            } else {
+                throw runtime_error("Hand analysis dump is only for post-flop chance nodes.");
             }
 
-            int card_num = this->deck.getCards().size();
-            int new_deal;
-            if(deal == 0){
-                new_deal = card + 1;
-            } else if (deal > 0 && deal <= card_num){
-                int origin_deal = deal - 1;
+            write_comma();
+            stream << "\"dealcards\":{";
 
-#ifdef DEBUG
-                if(origin_deal == card) throw runtime_error("deal should not be equal");
-#endif
-                new_deal = card_num * origin_deal + card;
+            int card_idx = next_card.getNumberInDeckInt();
+            if (card_idx < 0) {
+                throw runtime_error("Card from full_board has invalid deck index during dump: " + next_card.toString());
+            }
+
+            int new_deal;
+            int card_num = this->deck.getCards().size();
+            if (deal == 0) {
+                new_deal = card_idx + 1;
+            } else if (deal > 0 && deal <= card_num) {
+                int origin_deal = deal - 1;
+                new_deal = card_num * origin_deal + card_idx;
                 new_deal += (1 + card_num);
-            } else{
+            } else {
                 throw runtime_error(tfm::format("deal out of range : %s ",deal));
             }
 
-            if(exchange_color_list.size() > 1){
-                throw runtime_error("exchange color list shouldn't be exceed size 1 here");
-            }
+            vector<string> new_prefix(prefix);
+            new_prefix.push_back("Chance:" + next_card.toString());
 
-            string one_card_str = one_card.toString();
-            if(exchange_color_list.size() == 1) {
-                int rank1 = exchange_color_list[0][0];
-                int rank2 = exchange_color_list[0][1];
-                if(one_card.getCardInt() % 4 == rank1){
-                    one_card_str = Card::intCard2Str(one_card.getCardInt() - rank1 + rank2);
-                }else if(one_card.getCardInt() % 4 == rank2){
-                    one_card_str = Card::intCard2Str(one_card.getCardInt() - rank2 + rank1);
+            this->reConvertJson(stream, chanceNode->getChildren(), next_card.toString(), depth + 1, max_depth, new_prefix, new_deal, exchange_color_list);
+
+            stream << "}";
+            write_comma();
+            stream << "\"deal_number\":1";
+        } else {
+        const vector<Card>& cards = chanceNode->getCards();
+        shared_ptr<GameTreeNode> child_node = chanceNode->getChildren();
+
+        if (!cards.empty()) {
+            write_comma();
+            stream << "\"dealcards\":{";
+            bool first_child = true;
+            for(std::size_t i = 0;i < cards.size();i ++){
+                vector<vector<int>> new_exchange_color_list(exchange_color_list);
+                const Card& one_card = cards[i];
+                vector<string> new_prefix(prefix);
+                new_prefix.push_back("Chance:" + one_card.toString());
+
+                std::size_t card = i;
+
+                int offset = this->color_iso_offset[deal][one_card.getCardInt() % 4];
+                if(offset < 0) {
+                    for(std::size_t x = 0;x < cards.size();x ++){
+                        if(
+                                Card::card2int(cards[x]) ==
+                                (Card::card2int(one_card) + offset)
+                        ){
+                            card = x;
+                            break;
+                        }
+                    }
+                    if(card == i){
+                        throw runtime_error("isomorphism not found while dump strategy");
+                    }
+                    vector<int> one_exchange{one_card.getCardInt() % 4,one_card.getCardInt() % 4 + offset};
+                    new_exchange_color_list.push_back(one_exchange);
                 }
 
+                int card_num = this->deck.getCards().size();
+                int new_deal;
+                if(deal == 0){
+                    new_deal = card + 1;
+                } else if (deal > 0 && deal <= card_num){
+                    int origin_deal = deal - 1;
+
+#ifdef DEBUG
+                    if(origin_deal == static_cast<int>(card)) throw runtime_error("deal should not be equal");
+#endif
+                    new_deal = card_num * origin_deal + card;
+                    new_deal += (1 + card_num);
+                } else{
+                    throw runtime_error(tfm::format("deal out of range : %s ",deal));
+                }
+
+                if(exchange_color_list.size() > 1){
+                    throw runtime_error("exchange color list shouldn't be exceed size 1 here");
+                }
+
+                string one_card_str = one_card.toString();
+                if(exchange_color_list.size() == 1) {
+                    int rank1 = exchange_color_list[0][0];
+                    int rank2 = exchange_color_list[0][1];
+                    if(one_card.getCardInt() % 4 == rank1){
+                        one_card_str = Card::intCard2Str(one_card.getCardInt() - rank1 + rank2);
+                    }else if(one_card.getCardInt() % 4 == rank2){
+                        one_card_str = Card::intCard2Str(one_card.getCardInt() - rank2 + rank1);
+                    }
+                }
+
+                if (!first_child) stream << ",";
+                first_child = false;
+                this->reConvertJson(stream, child_node, one_card_str, depth + 1, max_depth, new_prefix, new_deal, new_exchange_color_list);
             }
-
-            this->reConvertJson(childerns,dealcards,one_card_str,depth + 1,max_depth,new_prefix,new_deal,new_exchange_color_list);
+            stream << "}";
+            write_comma();
+            stream << "\"deal_number\":" << cards.size();
+        } else {
+            write_comma();
+            stream << "\"deal_number\":0";
         }
-        if((*retval)["dealcards"].empty()){
-            (*retval).erase("dealcards");
         }
-
-        (*retval)["deal_number"] = dealcards.size();
-        (*retval)["node_type"] = "chance_node";
     }else{
         throw runtime_error("node type unknown!!");
     }
+    stream << "}";
 }
 
 vector<vector<vector<float>>> PCfrSolver::get_strategy(shared_ptr<ActionNode> node,vector<Card> chance_cards){
@@ -1022,10 +1156,25 @@ vector<vector<vector<float>>> PCfrSolver::get_strategy(shared_ptr<ActionNode> no
         }
     }
 
-    vector<Card>& cards = this->deck.getCards();
+    vector<Card> relevant_chance_cards;
+    if (node->getRound() != this->root_round) {
+        // Determine how many chance cards are needed to get from the root street to the node's street.
+        int root_round_int = GameTreeNode::gameRound2int(this->root_round);
+        int node_round_int = GameTreeNode::gameRound2int(node->getRound());
+        int cards_to_take = node_round_int - root_round_int;
 
-    for(Card one_card: chance_cards){
+        if (cards_to_take > 0 && chance_cards.size() >= static_cast<size_t>(cards_to_take)) {
+            for (int i = 0; i < cards_to_take; ++i) {
+                relevant_chance_cards.push_back(chance_cards[i]);
+            }
+        }
+    }
+
+    const vector<Card>& cards = this->deck.getCards();
+
+    for(Card one_card: relevant_chance_cards){
         int card = one_card.getNumberInDeckInt();
+        if (card < 0) throw runtime_error("Card in get_strategy has no deck index: " + one_card.toString());
         int offset = this->color_iso_offset[deal][one_card.getCardInt() % 4];
         if(offset < 0) {
             for(std::size_t x = 0;x < cards.size();x ++){
@@ -1057,6 +1206,9 @@ vector<vector<vector<float>>> PCfrSolver::get_strategy(shared_ptr<ActionNode> no
         deal = new_deal;
     }
     shared_ptr<Trainable> trainable = node->getTrainable(deal,true,this->use_halffloats);
+    if (!trainable) {
+        return ret_strategy;
+    }
     json retjson = trainable->dump_strategy(false);;
 
     for(vector<int> one_exchange:exchange_color_list){
@@ -1106,10 +1258,25 @@ vector<vector<vector<float>>> PCfrSolver::get_evs(shared_ptr<ActionNode> node,ve
         }
     }
 
-    vector<Card>& cards = this->deck.getCards();
+    vector<Card> relevant_chance_cards;
+    if (node->getRound() != this->root_round) {
+        // Determine how many chance cards are needed to get from the root street to the node's street.
+        int root_round_int = GameTreeNode::gameRound2int(this->root_round);
+        int node_round_int = GameTreeNode::gameRound2int(node->getRound());
+        int cards_to_take = node_round_int - root_round_int;
 
-    for(Card one_card: chance_cards){
+        if (cards_to_take > 0 && chance_cards.size() >= static_cast<size_t>(cards_to_take)) {
+            for (int i = 0; i < cards_to_take; ++i) {
+                relevant_chance_cards.push_back(chance_cards[i]);
+            }
+        }
+    }
+
+    const vector<Card>& cards = this->deck.getCards();
+
+    for(Card one_card: relevant_chance_cards){
         int card = one_card.getNumberInDeckInt();
+        if (card < 0) throw runtime_error("Card in get_evs has no deck index: " + one_card.toString());
         int offset = this->color_iso_offset[deal][one_card.getCardInt() % 4];
         if(offset < 0) {
             for(std::size_t x = 0;x < cards.size();x ++){
@@ -1141,6 +1308,9 @@ vector<vector<vector<float>>> PCfrSolver::get_evs(shared_ptr<ActionNode> node,ve
         deal = new_deal;
     }
     shared_ptr<Trainable> trainable = node->getTrainable(deal,true,this->use_halffloats);
+    if (!trainable) {
+        return ret_evs;
+    }
     json retjson = trainable->dump_evs();
 
     for(vector<int> one_exchange:exchange_color_list){
@@ -1176,12 +1346,18 @@ vector<vector<vector<float>>> PCfrSolver::get_evs(shared_ptr<ActionNode> node,ve
     return ret_evs;
 }
 
+void PCfrSolver::dumps(std::ostream& stream, bool with_status, int depth) {
+    if (with_status) {
+        throw runtime_error("Streaming dump with status is not supported.");
+    }
+    reConvertJson(stream, this->tree->getRoot(), "", 0, depth, vector<string>({"begin"}), 0, vector<vector<int>>());
+}
+
 json PCfrSolver::dumps(bool with_status,int depth) {
     if(with_status == true){
         throw runtime_error("");
     }
-    json retjson;
-    this->reConvertJson(this->tree->getRoot(),retjson,"",0,depth,vector<string>({"begin"}),0,vector<vector<int>>());
-    return std::move(retjson);
+    std::stringstream ss;
+    dumps(ss, with_status, depth);
+    return json::parse(ss.str());
 }
-

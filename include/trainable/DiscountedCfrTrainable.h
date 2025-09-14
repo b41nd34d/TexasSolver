@@ -43,6 +43,7 @@ public:
     void copyStrategy(shared_ptr<Trainable> other_trainable);
 
     json dump_strategy(bool with_state) override;
+    void dump_strategy(std::ostream& stream, bool with_state, const vector<vector<int>>& exchange_color_list, const shared_ptr<ActionNode>& node) override;
 
     json dump_evs() override;
 

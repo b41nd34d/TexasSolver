@@ -20,10 +20,7 @@ class DetailItemDelegate: public WordItemDelegate{
     Q_OBJECT
 
 public:
-    explicit DetailItemDelegate(DetailWindowSetting* detailWindowSetting,QObject *parent = 0);
-
-private:
-    DetailWindowSetting* detailWindowSetting = NULL;
+    explicit DetailItemDelegate(QObject *parent = nullptr);
 
 protected:
     void paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const;

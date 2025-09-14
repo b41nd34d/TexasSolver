@@ -6,11 +6,11 @@
 
 GameActions::GameActions() = default;
 
-GameTreeNode::PokerActions GameActions::getAction() {
+GameTreeNode::PokerActions GameActions::getAction() const {
     return this->action;
 }
 
-double GameActions::getAmount() {
+double GameActions::getAmount() const {
     return this->amount;
 }
 
@@ -24,7 +24,7 @@ GameActions::GameActions(GameTreeNode::PokerActions action, double amount) {
     this->amount = amount;
 }
 
-string GameActions::pokerActionToString(GameTreeNode::PokerActions pokerActions) {
+string GameActions::pokerActionToString(GameTreeNode::PokerActions pokerActions) const {
     switch (pokerActions)
     {
         case GameTreeNode::PokerActions::BEGIN :   return "BEGIN";
@@ -40,7 +40,7 @@ string GameActions::pokerActionToString(GameTreeNode::PokerActions pokerActions)
     }
 }
 
-string GameActions::toString() {
+string GameActions::toString() const {
     if(this->amount == -1) {
         return this->pokerActionToString(this->action);
     }else{

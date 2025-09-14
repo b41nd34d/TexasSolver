@@ -21,10 +21,7 @@ class RoughStrategyItemDelegate: public WordItemDelegate{
     Q_OBJECT
 
 public:
-    explicit RoughStrategyItemDelegate(DetailWindowSetting* detailWindowSetting,QObject *parent = 0);
-
-private:
-    DetailWindowSetting* detailWindowSetting = NULL;
+    explicit RoughStrategyItemDelegate(QObject *parent = nullptr);
 
 protected:
     void paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const;

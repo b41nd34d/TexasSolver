@@ -22,6 +22,12 @@ public:
     };
     Mode mode = Mode::HOLDEM;
 
+    enum class AnalysisMode {
+        STANDARD,
+        HAND_ANALYSIS
+    };
+    AnalysisMode analysis_mode = AnalysisMode::STANDARD;
+
     enum MissionType{
         LOADING,
         SOLVING,
@@ -36,13 +42,14 @@ public:
     int current_round=1;
     int raise_limit=4;
     int thread_number=1;
-    float small_blind=0.5;
-    float big_blind=1;
+    float small_blind=0.5f;
+    float big_blind=1.0f;
     float stack=20 + 5;
-    float allin_threshold = 0.67;
+    float allin_threshold = 0.67f;
     string range_ip;
     string range_oop;
     string board;
+    string full_board;
     float accuracy;
     int max_iteration=100;
     int use_isomorphism=1;

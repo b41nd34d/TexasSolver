@@ -45,6 +45,8 @@ private:
     int getRank(vector<Card> cards);
     int getRank(vector<int> cards);
     static CompairResult compairRanks(int rank_former,int rank_latter);
+    template<typename T>
+    Compairer::CompairResult compair_template(const vector<T>& private_former, const vector<T>& private_latter, const vector<T>& public_board);
 
 };
 

@@ -30,7 +30,7 @@ void RoughStrategyViewerModel::onchanged(){
 
 int RoughStrategyViewerModel::columnCount(const QModelIndex &parent) const
 {
-    return this->tableStrategyModel->total_strategy.size();
+    return static_cast<int>(this->tableStrategyModel->total_strategy.size());
 }
 
 int RoughStrategyViewerModel::rowCount(const QModelIndex &parent) const

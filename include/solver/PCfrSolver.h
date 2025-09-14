@@ -90,19 +90,27 @@ public:
             float accuracy,
             bool use_isomorphism,
             int use_halffloats,
-            int num_threads
+             int num_threads,
+             Solver::AnalysisMode analysis_mode,
+             const string& full_board
     );
     ~PCfrSolver();
     void train() override;
     void stop() override;
     json dumps(bool with_status,int depth) override;
+    void dumps(std::ostream& stream, bool with_status, int depth) override;
     vector<vector<vector<float>>> get_strategy(shared_ptr<ActionNode> node,vector<Card> chance_cards) override;
     vector<vector<vector<float>>> get_evs(shared_ptr<ActionNode> node,vector<Card> chance_cards) override;
+    vector<Card> get_initial_board_cards() override { return this->initial_board_cards; }
+    vector<Card> get_full_board_cards() override { return this->full_board_cards; }
+
+    const vector<Card>& get_full_board_cards() const { return full_board_cards; }
 private:
     vector<vector<PrivateCards>> ranges;
     vector<PrivateCards> range1;
     vector<PrivateCards> range2;
     vector<int> initial_board;
+    vector<Card> initial_board_cards;
     uint64_t initial_board_long;
     shared_ptr<Compairer> compairer;
     int color_iso_offset[52 * 52 * 2][4] = {0};
@@ -129,6 +137,9 @@ private:
     bool use_isomorphism;
     int use_halffloats;
     bool nowstop = false;
+     Solver::AnalysisMode analysis_mode;
+     vector<Card> full_board_cards;
+     uint64_t full_board_long;
 
     const vector<PrivateCards>& playerHands(int player);
     vector<vector<float>> getReachProbs();
@@ -143,8 +154,7 @@ private:
     void findGameSpecificIsomorphisms();
     void purnTree();
     void exchangeRange(json& strategy,int rank1,int rank2,shared_ptr<ActionNode> one_node);
-    void reConvertJson(const shared_ptr<GameTreeNode>& node,json& strategy,string key,int depth,int max_depth,vector<string> prefix,int deal,vector<vector<int>> exchange_color_list);
-
+    void reConvertJson(std::ostream& stream, const shared_ptr<GameTreeNode>& node, const string& key, int depth, int max_depth, vector<string> prefix, int deal, vector<vector<int>> exchange_color_list);
 };
 
 
