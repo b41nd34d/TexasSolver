@@ -92,13 +92,30 @@ long long PokerSolver::estimate_tree_memory(QString range1,QString range2,QStrin
 
 void PokerSolver::train(string p1_range, string p2_range, string boards, string log_file, int iteration_number,
                         int print_interval, string algorithm,int warmup,float accuracy,bool use_isomorphism, int use_halffloats, int threads) {
+    if (this->game_tree == nullptr) {
+        throw runtime_error("Game tree not built. Please use the build_tree command first.");
+    }
+    if (boards.empty()) {
+        throw runtime_error("Board is empty. Please use the set_board command first.");
+    }
     string player1RangeStr = p1_range;
     string player2RangeStr = p2_range;
 
     vector<string> board_str_arr = string_split(boards,',');
     vector<int> initialBoard;
-    for(string one_board_str:board_str_arr){
-        initialBoard.push_back(Card::strCard2int(one_board_str));
+
+    if (this->analysis_mode == Solver::AnalysisMode::HAND_ANALYSIS) {
+        if (board_str_arr.size() < 3) {
+            throw runtime_error("Hand analysis requires at least a 3-card flop.");
+        }
+        // For hand analysis, the initial board for the tree is just the flop
+        for(int i = 0; i < 3; ++i) {
+            initialBoard.push_back(Card::strCard2int(board_str_arr[i]));
+        }
+    } else {
+        for(const string& one_board_str:board_str_arr){
+            initialBoard.push_back(Card::strCard2int(one_board_str));
+        }
     }
 
     vector<PrivateCards> range1 = PrivateRangeConverter::rangeStr2Cards(player1RangeStr,initialBoard);

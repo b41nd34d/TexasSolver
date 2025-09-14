@@ -73,8 +73,12 @@ PCfrSolver::PCfrSolver(shared_ptr<GameTree> tree, vector<PrivateCards> range1, v
     this->num_threads = num_threads;
     this->analysis_mode = analysis_mode;
     if (this->analysis_mode == Solver::AnalysisMode::HAND_ANALYSIS) {
+        if (full_board.empty()) {
+            throw runtime_error("Hand analysis mode requires a full board, but the board string is empty.");
+        }
         vector<string> card_strs = string_split(full_board, ',');
         for (const string& one_card_str : card_strs) {
+            if (one_card_str.empty()) continue;
             bool found = false;
             for(const Card& deck_card : this->deck.getCards()){
                 if(deck_card.getCard() == one_card_str){

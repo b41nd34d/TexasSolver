@@ -90,6 +90,7 @@ SOURCES += \
     src/tools/lookup8.cpp \
     src/tools/PrivateRangeConverter.cpp \
     src/tools/progressbar.cpp \
+    src/tools/CommandLineTool.cpp \
     src/tools/Rule.cpp \
     src/tools/StreetSetting.cpp \
     src/tools/utils.cpp \
