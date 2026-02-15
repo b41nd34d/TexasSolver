@@ -84,12 +84,13 @@ long long PokerSolver::estimate_tree_memory(QString range1,QString range2,QStrin
 
         vector<PrivateCards> range1 = PrivateRangeConverter::rangeStr2Cards(player1RangeStr,initialBoard);
         vector<PrivateCards> range2 = PrivateRangeConverter::rangeStr2Cards(player2RangeStr,initialBoard);
-        return this->game_tree->estimate_tree_memory(this->deck.getCards().size() - initialBoard.size(),range1.size(),range2.size());
+        return this->game_tree->estimate_tree_memory(static_cast<int>(this->deck.getCards().size() - initialBoard.size()), static_cast<int>(range1.size()), static_cast<int>(range2.size()));
     }
 }
 
 void PokerSolver::train(string p1_range, string p2_range, string boards, string log_file, int iteration_number,
-                        int print_interval, string algorithm,int warmup,float accuracy,bool use_isomorphism, int use_halffloats, int threads) {
+                        int print_interval, string algorithm,int warmup,float accuracy,bool use_isomorphism, int use_halffloats, int threads,
+                        const vector<LockedNode>& locked_nodes, const std::optional<FullBoardSituation>& full_board) {
     string player1RangeStr = p1_range;
     string player2RangeStr = p2_range;
 
@@ -126,7 +127,7 @@ void PokerSolver::train(string p1_range, string p2_range, string boards, string 
             , use_halffloats
             , threads
     );
-    this->solver->train();
+    this->solver->train(locked_nodes, full_board);
 }
 
 void PokerSolver::dump_strategy(QString dump_file,int dump_rounds) {

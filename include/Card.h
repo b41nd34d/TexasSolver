@@ -21,9 +21,9 @@ class Card {
         explicit Card(string card,int card_number_in_deck);
         Card(string card);
         string getCard();
-        int getCardInt();
+        int getCardInt() const;
         bool empty();
-        int getNumberInDeckInt();
+        int getNumberInDeckInt() const;
         static int card2int(Card card);
         static int strCard2int(string card);
         static string intCard2Str(int card);
@@ -43,8 +43,8 @@ class Card {
         static int rankToInt(char rank);
         static int suitToInt(char suit);
         static vector<string> getSuits();
-        string toString();
-        string toFormattedString();
+        string toString() const;
+        string toFormattedString() const;
         QString toFormattedHtml();
 };
 

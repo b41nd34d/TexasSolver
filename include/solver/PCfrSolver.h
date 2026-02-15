@@ -13,11 +13,13 @@
 #include <include/trainable/DiscountedCfrTrainable.h>
 #include "include/solver/Solver.h"
 #include <omp.h>
+#include "include/solver/solver_options.h"
 #include "include/tools/lookup8.h"
 #include "include/tools/utils.h"
 #include <queue>
 #include <optional>
-/*
+#include <unordered_map>
+/* 
 template<typename T>
 class ThreadsafeQueue {
     std::queue<T> queue_;
@@ -93,12 +95,22 @@ public:
             int num_threads
     );
     ~PCfrSolver();
-    void train() override;
+    void train(const vector<LockedNode>& locked_nodes, const std::optional<FullBoardSituation>& full_board) override;
     void stop() override;
-    json dumps(bool with_status,int depth) override;
-    vector<vector<vector<float>>> get_strategy(shared_ptr<ActionNode> node,vector<Card> chance_cards) override;
-    vector<vector<vector<float>>> get_evs(shared_ptr<ActionNode> node,vector<Card> chance_cards) override;
+    json dumps(bool with_status, int depth) override;
+    ActionStrategy get_strategy(shared_ptr<ActionNode> node, vector<Card> chance_cards, const std::string& path) override;
+    ActionEVs get_evs(shared_ptr<ActionNode> node, vector<Card> chance_cards, const std::string& path) override;
 private:
+    struct AnalysisState {
+        bool enabled = false;
+        std::unordered_map<std::string, const LockedNode*> locked_nodes_map;
+        std::optional<FullBoardSituation> full_board;
+
+        bool isNodeLocked(const std::string& path, int player) const;
+        const Strategy* getLockedStrategy(const std::string& path, int player) const;
+    };
+    AnalysisState m_analysis;
+
     vector<vector<PrivateCards>> ranges;
     vector<PrivateCards> range1;
     vector<PrivateCards> range2;
@@ -134,12 +146,12 @@ private:
     vector<vector<float>> getReachProbs();
     static vector<PrivateCards> noDuplicateRange(const vector<PrivateCards>& private_range,uint64_t board_long);
     void setTrainable(shared_ptr<GameTreeNode> root);
-    vector<float> cfr(int player, shared_ptr<GameTreeNode> node, const vector<float>& reach_probs, int iter, uint64_t current_board,int deal);
+    vector<float> cfr(int player, shared_ptr<GameTreeNode> node, const vector<float>& reach_probs, int iter, uint64_t current_board,int deal, const string& path);
     vector<int> getAllAbstractionDeal(int deal);
-    vector<float> chanceUtility(int player,shared_ptr<ChanceNode> node,const vector<float>& reach_probs,int iter,uint64_t current_boardi,int deal);
-    vector<float> showdownUtility(int player,shared_ptr<ShowdownNode> node,const vector<float>& reach_probs,int iter,uint64_t current_board,int deal);
-    vector<float> actionUtility(int player,shared_ptr<ActionNode> node,const vector<float>& reach_probs,int iter,uint64_t current_board,int deal);
-    vector<float> terminalUtility(int player,shared_ptr<TerminalNode> node,const vector<float>& reach_prob,int iter,uint64_t current_board,int deal);
+    vector<float> chanceUtility(int player,shared_ptr<ChanceNode> node,const vector<float>& reach_probs,int iter,uint64_t current_board,int deal, const string& path);
+    vector<float> showdownUtility(int player,shared_ptr<ShowdownNode> node,const vector<float>& reach_probs,int iter,uint64_t current_board,int deal, const string& path);
+    vector<float> actionUtility(int player,shared_ptr<ActionNode> node,const vector<float>& reach_probs,int iter,uint64_t current_board,int deal, const string& path);
+    vector<float> terminalUtility(int player,shared_ptr<TerminalNode> node,const vector<float>& reach_prob,int iter,uint64_t current_board,int deal, const string& path);
     void findGameSpecificIsomorphisms();
     void purnTree();
     void exchangeRange(json& strategy,int rank1,int rank2,shared_ptr<ActionNode> one_node);

@@ -3,6 +3,9 @@
 //
 #include "include/tools/CommandLineTool.h"
 #include <QString>
+#include <algorithm>
+#include <cctype>
+#include "include/Card.h"
 
 CommandLineTool::CommandLineTool(string mode,string resource_dir) {
     string suits = "c,d,h,s";
@@ -54,6 +57,43 @@ CommandLineTool::CommandLineTool(string mode,string resource_dir) {
             8
     );
      */
+}
+
+void CommandLineTool::parseAndAddNodeLockRule(const std::string& rule_line) {
+    std::vector<std::string> parts;
+    split(rule_line, ';', parts);
+    if (parts.size() != 4) {
+        std::cout << "Warning: Skipping invalid node lock rule (wrong format): " << rule_line << std::endl;
+        return;
+    }
+
+    std::string path = parts[0];
+    int player = std::stoi(parts[1]);
+    std::string action_str = parts[2];
+    std::transform(action_str.begin(), action_str.end(), action_str.begin(),
+                   [](unsigned char c){ return std::tolower(c); });
+    double prob = std::stod(parts[3]) / 100.0;
+
+    Action action_key;
+    if (action_str == "f" || action_str == "fold") {
+        action_key = -1;
+    } else if (action_str == "c" || action_str == "check" || action_str == "call") {
+        action_key = 0;
+    } else if (action_str.rfind("b_", 0) == 0 || action_str.rfind("bet_", 0) == 0 || action_str.rfind("bet ", 0) == 0) {
+        size_t pos = action_str.find_last_of("_ ");
+        action_key = static_cast<Action>(std::stof(action_str.substr(pos + 1)));
+    } else if (action_str.rfind("r_", 0) == 0 || action_str.rfind("raise_", 0) == 0 || action_str.rfind("raise ", 0) == 0) {
+        size_t pos = action_str.find_last_of("_ ");
+        action_key = static_cast<Action>(std::stof(action_str.substr(pos + 1)));
+    } else {
+        std::cout << "Warning: Skipping invalid action in node lock rule: " << action_str << std::endl;
+        return;
+    }
+
+    auto map_key = std::make_pair(path, player);
+    m_locked_nodes_map[map_key].node_path = path;
+    m_locked_nodes_map[map_key].player_to_lock = player;
+    m_locked_nodes_map[map_key].locked_strategy[action_key] = prob;
 }
 
 void CommandLineTool::startWorking() {
@@ -154,8 +194,43 @@ void CommandLineTool::processCommand(string input) {
         this->use_isomorphism = stoi(paramstr);
     }else if(command == "set_print_interval"){
         this->print_interval = stoi(paramstr);
+    }else if(command == "set_full_board_analysis"){
+        this->m_use_full_board_analysis = (paramstr == "1");
+    }else if(command == "add_node_lock_rule"){
+        this->parseAndAddNodeLockRule(paramstr);
     }else if(command == "start_solve"){
         cout << "<<<START SOLVING>>>" << endl;
+
+        // Convert map to vector
+        vector<LockedNode> locked_nodes;
+        for (const auto& [key, val] : m_locked_nodes_map) {
+            locked_nodes.push_back(val);
+        }
+
+        // Create optional full board situation
+        std::optional<FullBoardSituation> full_board_situation = std::nullopt;
+        if (m_use_full_board_analysis) {
+            vector<string> board_str_arr;
+            split(this->board, ',', board_str_arr);
+            if (board_str_arr.size() == 5) {
+                FullBoardSituation situation;
+                bool ok = true;
+                for (const auto& card_str : board_str_arr) {
+                    if (!card_str.empty()) {
+                        situation.board_cards.push_back(Card::strCard2int(card_str));
+                    } else {
+                        ok = false;
+                    }
+                }
+                if (ok && situation.board_cards.size() == 5) {
+                    full_board_situation = situation;
+                } else {
+                    cout << "Warning: Full board analysis enabled, but board does not contain 5 valid cards. Solving normally." << endl;
+                }
+            } else {
+                cout << "Warning: Full board analysis enabled, but board does not contain 5 cards. Solving normally." << endl;
+            }
+        }
         this->ps.train(
                 this->range_ip,
                 this->range_oop,
@@ -168,7 +243,9 @@ void CommandLineTool::processCommand(string input) {
                 this->accuracy,
                 this->use_isomorphism,
                 0, // TODO: enable half float option for command line tool
-                this->thread_number
+                this->thread_number,
+                locked_nodes,
+                full_board_situation
         );
     }else if(command == "dump_result"){
         string output_file = paramstr;

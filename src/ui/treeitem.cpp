@@ -1,4 +1,5 @@
 #include "include/ui/treeitem.h"
+#include <QDebug>
 
 TreeItem::TreeItem(weak_ptr<GameTreeNode> data,TreeItem *parentItem) :
     m_parentItem(parentItem)
@@ -52,35 +53,72 @@ QString TreeItem::get_game_action_str(GameTreeNode::PokerActions action,float am
 
 QVariant TreeItem::data() const
 {
-    shared_ptr<GameTreeNode> parentNode = this->m_treedata.lock()->getParent();
     shared_ptr<GameTreeNode> currentNode = this->m_treedata.lock();
-    if(parentNode == nullptr){
+    if (!currentNode) return "Expired Node";
+
+    shared_ptr<GameTreeNode> parentNode = currentNode->getParent();
+    // --- Defensive checks for corrupted tree structure ---
+    if (m_parentItem && m_parentItem->m_treedata.lock() != parentNode) {
+        qWarning() << "TreeItem data inconsistency: UI parent does not match data parent.";
+        return "Data Error";
+    }
+    if (parentNode && parentNode == currentNode) {
+        qWarning() << "TreeItem data inconsistency: Node is its own parent (cycle detected).";
+        return "Cyclic Node Error";
+    }
+
+    if (parentNode == nullptr) {
         return TreeItem::get_round_str(currentNode->getRound()) + QObject::tr(" begin");
     }
-    if(parentNode->getType() == GameTreeNode::GameTreeNodeType::ACTION){
+
+    if (parentNode->getType() == GameTreeNode::GameTreeNodeType::ACTION) {
         shared_ptr<ActionNode> parentActionNode = dynamic_pointer_cast<ActionNode>(parentNode);
-        vector<GameActions>& actions = parentActionNode->getActions();
-        vector<shared_ptr<GameTreeNode>>& childrens = parentActionNode->getChildrens();
-        for(std::size_t i = 0;i < childrens.size();i ++){
-            if(childrens[i] == currentNode){
-                float amount = childrens[i]->getPot() - parentNode->getPot();
+        const auto& actions = parentActionNode->getActions();
+        const auto& childrens = parentActionNode->getChildrens();
+        for (std::size_t i = 0; i < childrens.size(); i++) {
+            if (childrens[i] == currentNode) {
                 return (parentActionNode->getPlayer() == 0 ? QObject::tr("IP "):QObject::tr("OOP ")) + \
-                       TreeItem::get_game_action_str(actions[i].getAction(),actions[i].getAmount());
+                       TreeItem::get_game_action_str(actions[i].getAction(), actions[i].getAmount());
             }
         }
-    }if(parentNode->getType() == GameTreeNode::GameTreeNodeType::CHANCE){
+    } else if (parentNode->getType() == GameTreeNode::GameTreeNodeType::CHANCE) {
         shared_ptr<ChanceNode> chanceNode = dynamic_pointer_cast<ChanceNode>(parentNode);
-        if(chanceNode->getRound() == GameTreeNode::GameRound::FLOP){
-            return QObject::tr("DEAL FLOP CARD");
-        }
-        else if(chanceNode->getRound() == GameTreeNode::GameRound::TURN){
-            return QObject::tr("DEAL TURN CARD");
-        }
-        else if(chanceNode->getRound() == GameTreeNode::GameRound::RIVER){
-            return QObject::tr("DEAL RIVER CARD");
-        }else throw runtime_error("round not recognized");
+        return QObject::tr("DEAL ") + get_round_str(chanceNode->getRound()) + QObject::tr(" CARD");
     }
+
     return "NodeError";
+}
+
+std::string TreeItem::getActionPath() const {
+    std::list<std::string> path_parts;
+    const TreeItem* current_item = this;
+
+    while (current_item && current_item->m_parentItem) {
+        shared_ptr<GameTreeNode> parentNode = current_item->m_parentItem->m_treedata.lock();
+        shared_ptr<GameTreeNode> currentNode = current_item->m_treedata.lock();
+        if (parentNode && currentNode && parentNode->getType() == GameTreeNode::GameTreeNodeType::ACTION) {
+            shared_ptr<ActionNode> parentActionNode = dynamic_pointer_cast<ActionNode>(parentNode);
+            const auto& actions = parentActionNode->getActions();
+            const auto& childrens = parentActionNode->getChildrens();
+            for (size_t i = 0; i < childrens.size(); ++i) {
+                if (childrens[i] == currentNode) {
+                    path_parts.push_front(actions[i].toString());
+                    break;
+                }
+            }
+        }
+        current_item = current_item->m_parentItem;
+    }
+
+    std::string result_path; // Use a stringstream for efficient concatenation
+    std::stringstream ss;
+    for (const auto& part : path_parts) {
+        ss << part << "/";
+    }
+    result_path = ss.str();
+
+    // The root node's path is empty, otherwise paths have a trailing slash.
+    return result_path;
 }
 
 bool TreeItem::setParentItem(TreeItem *item)
